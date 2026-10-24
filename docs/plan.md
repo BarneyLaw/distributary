@@ -16,3 +16,9 @@
 - We need to define what is a slow client, SEQ - ACK > n
 
 - We need to define what is considered total disconnect
+
+- We need to synchronize the client's clock with the server. The authoritative timing will be based on the server clock
+
+### Work distribution
+
+- Please write a spec file in the component, detailing the intended implementation so that others can work along it rather than waiting.
