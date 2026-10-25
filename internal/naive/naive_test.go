@@ -1,5 +1,5 @@
 package naive
- 
+
 import (
 	"encoding/json"
 	"io"
@@ -8,10 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
- 
+
 	"github.com/gorilla/websocket"
 )
-
 
 func startServer(t *testing.T) (*Server, string) {
 	t.Helper()
@@ -39,7 +38,7 @@ func send(t *testing.T, c *websocket.Conn, msg string) {
 	}
 }
 
-func read(t *testing.T, c *websocket.Conn)[]byte {
+func read(t *testing.T, c *websocket.Conn) []byte {
 	t.Helper()
 	_, b, err := c.ReadMessage()
 	if err != nil {
@@ -64,7 +63,7 @@ const clientHello = `{"type":"CLIENT_HELLO","client_id":1,"session":"L1","last_s
 
 func TestClientGetsEmptyHistoryThenForwardedCaptions(t *testing.T) {
 	s, url := startServer(t)
- 
+
 	client := dial(t, url)
 	send(t, client, clientHello)
 	var hist struct {
@@ -78,59 +77,59 @@ func TestClientGetsEmptyHistoryThenForwardedCaptions(t *testing.T) {
 		t.Fatalf("want empty HISTORY with items:[], got %+v", hist)
 	}
 	waitForClients(t, s, 1)
- 
+
 	source := dial(t, url)
 	send(t, source, `{"type":"SOURCE_HELLO","session":"L1"}`)
 	caption := `{"type":"CAPTION_UPDATE","session":"L1","segment":1,"revision":1,"source_ts":1760000000.5,"final":false,"text":"TCP uses","phase":"extra"}`
 	send(t, source, caption)
 	send(t, source, `{"type":"SOURCE_DONE","session":"L1","segments":1}`)
- 
+
 	if got := string(read(t, client)); got != caption {
 		t.Fatalf("caption not forwarded byte for byte:\n got %s\nwant %s", got, caption)
 	}
 }
- 
+
 func TestInvalidCaptionIsNotForwarded(t *testing.T) {
 	s, url := startServer(t)
 	client := dial(t, url)
 	send(t, client, clientHello)
 	read(t, client) // HISTORY
 	waitForClients(t, s, 1)
- 
+
 	source := dial(t, url)
 	send(t, source, `{"type":"SOURCE_HELLO","session":"L1"}`)
 	send(t, source, `{"type":"CAPTION_UPDATE","segment":0,"revision":1,"source_ts":1,"final":true,"text":"bad segment"}`)
 	good := `{"type":"CAPTION_UPDATE","segment":1,"revision":1,"source_ts":1,"final":true,"text":"ok"}`
 	send(t, source, good)
- 
+
 	if got := string(read(t, client)); got != good {
 		t.Fatalf("expected only the valid caption, got %s", got)
 	}
 }
- 
+
 func TestBadHelloClosesWithPolicyViolation(t *testing.T) {
 	_, url := startServer(t)
 	c := dial(t, url)
 	send(t, c, `{"type":"HISTORY","items":[]}`)
- 
+
 	_, _, err := c.ReadMessage()
 	var ce *websocket.CloseError
 	if !asCloseError(err, &ce) || ce.Code != closePolicyViolation {
 		t.Fatalf("want close code %d, got %v", closePolicyViolation, err)
 	}
 }
- 
+
 func TestDisconnectedClientIsRemoved(t *testing.T) {
 	s, url := startServer(t)
 	client := dial(t, url)
 	send(t, client, clientHello)
 	read(t, client)
 	waitForClients(t, s, 1)
- 
+
 	client.Close()
 	waitForClients(t, s, 0)
 }
- 
+
 func asCloseError(err error, target **websocket.CloseError) bool {
 	ce, ok := err.(*websocket.CloseError)
 	if ok {
@@ -138,4 +137,3 @@ func asCloseError(err error, target **websocket.CloseError) bool {
 	}
 	return ok
 }
-

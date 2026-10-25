@@ -24,8 +24,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/BarneyLaw/distributary/internal/protocol"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -47,10 +47,10 @@ var upgrader = websocket.Upgrader{
 // Server forwards captions from the source to every connected client.
 // It implements http.Handler: every request is upgraded to a WebSocket.
 type Server struct {
-	log 	*log.Logger
-	mu 		sync.Mutex
+	log     *log.Logger
+	mu      sync.Mutex
 	clients map[*websocket.Conn]struct{}
-}	
+}
 
 // New returns a new Server that logs to logger.
 func New(logger *log.Logger) *Server {
@@ -119,7 +119,7 @@ func (s *Server) handleSource(ws *websocket.Conn, hello *protocol.SourceHello) {
 		case *protocol.CaptionUpdate:
 			// forward exactly the bytes received, as the starter did
 			s.broadcast(raw)
-		
+
 		case *protocol.SourceDone:
 			return
 		}
@@ -168,7 +168,7 @@ func (server *Server) broadcast(frame []byte) {
 		go func() {
 			defer wg.Done()
 			errs[i] = c.WriteMessage(websocket.TextMessage, frame)
-		} ()
+		}()
 	}
 	wg.Wait()
 
@@ -178,7 +178,6 @@ func (server *Server) broadcast(frame []byte) {
 		}
 	}
 }
-
 
 // add adds the connection to the server's client set and returns the new size
 // of the set. The caller must not hold the server's mutex while calling this
