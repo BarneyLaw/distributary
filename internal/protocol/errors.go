@@ -11,7 +11,3 @@ var (
 	ErrBadType      = errors.New("protocol: field has wrong JSON type")
 	ErrOutOfRange   = errors.New("protocol: field value out of range")
 )
-
-// MaxHistorySeconds is the largest recovery window a client may request
-// (spec section 4.2).
-const MaxHistorySeconds = 60
