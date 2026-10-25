@@ -104,6 +104,9 @@ func decodeCaptionUpdate(obj object) (*CaptionUpdate, error) {
 		Final:    final,
 		Text:     text,
 	}
+	if err := validateCaptionUpdate(c); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -127,6 +130,9 @@ func decodeClientHello(obj object) (*ClientHello, error) {
 		LastSegment:    lastSegment,
 		LastRevision:   lastRevision,
 		HistorySeconds: historySeconds,
+	}
+	if err := validateClientHello(h); err != nil {
+		return nil, err
 	}
 	return h, nil
 }
