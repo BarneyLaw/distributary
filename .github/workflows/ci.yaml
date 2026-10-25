@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# Correctness only. Performance results come from our Ubuntu VM, not CI runners.
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal)" || (gofmt -l cmd internal && exit 1)
+
+      - name: Vet and unit tests
+        run: make test
+
+      - name: Cross-compile both binaries
+        run: make bins
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Harness dependencies
+        run: pip install -r requirements.txt
+
+      - name: Professor's files unmodified
+        run: make verify-harness
+
+      - name: Professor's submission check
+        run: make check
