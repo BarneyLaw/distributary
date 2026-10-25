@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+ 
+# Harness output: run_demo.py and monitor_server.py write beside themselves
+harness/*.csv
+harness/*.json
+ 
+# Raw experiment CSVs are large; commit the JSON summaries only
+experiments/results/*.csv
+ 
+# Scratch copy used by `make py-baseline`
+.baseline/
+ 
+# Go
+*.test
+*.out
+coverage.*

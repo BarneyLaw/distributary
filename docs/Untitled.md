@@ -24,7 +24,7 @@ os.execv(binary, [binary] + sys.argv[1:])
 
 - **Use `os.execv`, not `subprocess`.** `run_demo.py` stops the server with SIGTERM between runs. With `subprocess`, the signal kills only the Python parent, the Go child keeps port 8765, and the next run fails to bind. `execv` makes the Go process *be* the PID the harness signals.
 - **Commit prebuilt static binaries** for linux/amd64 and linux/arm64 (`CGO_ENABLED=0`). Don't build at startup: the evaluation VM may have no Go toolchain or no internet, and a cold `go build` can exceed the 10-second readiness limit.
-- **Vendor dependencies** (`go mod vendor`) so anyone can rebuild offline from the repo.
+- **No vendoring.** The evaluator runs the committed binaries and never builds, so `go.sum` pinning the dependencies is enough.
 - **Flags:** Go's `flag` package accepts `--port` as written. Every other flag must default to the best configuration, because the evaluator passes nothing else.
 - **`requirements.txt`** keeps `websockets`, since the public harness needs it, even though the server no longer does.
 - **One port for everything:** a plain `GET /` serves the browser client from `client/`, and a WebSocket upgrade on any path is a source or student connection. The harness connects to `ws://127.0.0.1:8765` with no path, so `/` must accept upgrades.
@@ -151,7 +151,7 @@ The package boundaries follow the sections above, so four people can work in par
 submission_root/
 ├── solution_server.py     # execv launcher (Packaging)
 ├── requirements.txt       # websockets, for the public harness
-├── go.mod  go.sum  vendor/
+├── go.mod  go.sum
 ├── cmd/liverecall/        # main: flags, HTTP + WebSocket upgrade, signals
 ├── internal/protocol/     # message types, decode/validate, compact encode
 ├── internal/session/      # ring, active segments, accept rules, Pick, Snapshot
@@ -160,7 +160,7 @@ submission_root/
 ├── bin/                   # liverecall-linux-amd64, liverecall-linux-arm64
 ├── client/                # index.html, app.js
 ├── experiments/           # run scripts, raw CSV/JSON, plotting
-├── Makefile               # build, cross-compile, test, vendor
+├── Makefile               # build, cross-compile, test
 └── README.md  AI_USAGE.md  CONTRIBUTIONS.md  report.pdf
 ```
 

@@ -14,8 +14,7 @@ Proposed layout for `distributary`: a Go server behind the required Python entry
 distributary/
 ├── solution_server.py        # launcher: exec bin/distributary-linux-<arch>
 ├── requirements.txt          # websockets (harness only)
-├── go.mod  go.sum            # Go 1.27
-├── vendor/                   # go mod vendor: offline rebuilds
+├── go.mod  go.sum            # Go 1.27; go.sum pins dependencies (no vendor/: the evaluator never builds)
 ├── Makefile                  # build, bins, test, check, experiment shortcuts
 ├── web.go                    # //go:embed client: browser files baked into the binary
 │
