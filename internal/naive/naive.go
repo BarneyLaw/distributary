@@ -135,10 +135,10 @@ func (server *Server) handleClient(ws *websocket.Conn, hello *protocol.ClientHel
 	}
 
 	m := server.add(ws)
-	server.log.Printf("client connected: %s (%d clients)", hello.ClientID, m)
+	server.log.Printf("client connected: id=%d (%d clients)", hello.ClientID, m)
 	defer func() {
 		m := server.remove(ws)
-		server.log.Printf("client disconnected: %s (%d clients)", hello.ClientID, m)
+		server.log.Printf("client disconnected: id=%d (%d clients)", hello.ClientID, m)
 	}()
 
 	for {
