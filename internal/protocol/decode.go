@@ -74,6 +74,8 @@ func orNil[T any](msg *T, err error) (any, error) {
 	return msg, nil
 }
 
+// decodeCaptionUpdate reads every CAPTION_UPDATE field strictly, then applies
+// the range rules in validate.go.
 func decodeCaptionUpdate(obj object) (*CaptionUpdate, error) {
 	segment, err := obj.requiredInt("segment")
 	if err != nil {
@@ -110,6 +112,8 @@ func decodeCaptionUpdate(obj object) (*CaptionUpdate, error) {
 	return c, nil
 }
 
+// decodeClientHello reads the resume fields, defaulting absent ones to 0, then
+// validates and clamps them.
 func decodeClientHello(obj object) (*ClientHello, error) {
 	lastSegment, err := obj.optionalInt("last_segment", 0)
 	if err != nil {

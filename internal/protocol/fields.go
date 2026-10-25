@@ -34,8 +34,8 @@ func (o object) messageType() (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: no type field", ErrUnknownType)
 	}
-	var t string
-	if !isString(v) || json.Unmarshal(v, &t) != nil {
+	t, ok := parseString(v)
+	if !ok {
 		return "", fmt.Errorf("%w: type is not a string", ErrUnknownType)
 	}
 	return t, nil
@@ -50,11 +50,20 @@ func (o object) lookup(key string) (json.RawMessage, bool) {
 	return v, true
 }
 
-// requiredInt returns key as an int64, failing if it is absent.
-func (o object) requiredInt(key string) (int64, error) {
+// require returns the raw value for key, or ErrMissingField if it is absent.
+func (o object) require(key string) (json.RawMessage, error) {
 	v, ok := o.lookup(key)
 	if !ok {
-		return 0, fmt.Errorf("%w: %s", ErrMissingField, key)
+		return nil, fmt.Errorf("%w: %s", ErrMissingField, key)
+	}
+	return v, nil
+}
+
+// requiredInt returns key as an int64, failing if it is absent.
+func (o object) requiredInt(key string) (int64, error) {
+	v, err := o.require(key)
+	if err != nil {
+		return 0, err
 	}
 	return parseInt(key, v)
 }
@@ -70,9 +79,9 @@ func (o object) optionalInt(key string, def int64) (int64, error) {
 
 // requiredFloat returns key as a float64, failing if it is absent.
 func (o object) requiredFloat(key string) (float64, error) {
-	v, ok := o.lookup(key)
-	if !ok {
-		return 0, fmt.Errorf("%w: %s", ErrMissingField, key)
+	v, err := o.require(key)
+	if err != nil {
+		return 0, err
 	}
 	return parseFloat(key, v)
 }
@@ -88,9 +97,9 @@ func (o object) optionalFloat(key string, def float64) (float64, error) {
 
 // requiredBool returns key as a bool, failing if it is absent.
 func (o object) requiredBool(key string) (bool, error) {
-	v, ok := o.lookup(key)
-	if !ok {
-		return false, fmt.Errorf("%w: %s", ErrMissingField, key)
+	v, err := o.require(key)
+	if err != nil {
+		return false, err
 	}
 	switch string(v) {
 	case "true":
@@ -103,12 +112,12 @@ func (o object) requiredBool(key string) (bool, error) {
 
 // requiredString returns key as a string, failing if it is absent.
 func (o object) requiredString(key string) (string, error) {
-	v, ok := o.lookup(key)
-	if !ok {
-		return "", fmt.Errorf("%w: %s", ErrMissingField, key)
+	v, err := o.require(key)
+	if err != nil {
+		return "", err
 	}
-	var s string
-	if !isString(v) || json.Unmarshal(v, &s) != nil {
+	s, ok := parseString(v)
+	if !ok {
 		return "", fmt.Errorf("%w: %s must be a string", ErrBadType, key)
 	}
 	return s, nil
@@ -122,10 +131,7 @@ func (o object) informationalString(key string) string {
 	if !ok {
 		return ""
 	}
-	var s string
-	if !isString(v) || json.Unmarshal(v, &s) != nil {
-		return ""
-	}
+	s, _ := parseString(v)
 	return s
 }
 
@@ -195,7 +201,12 @@ func isNumber(v json.RawMessage) bool {
 	return len(v) > 0 && (v[0] == '-' || (v[0] >= '0' && v[0] <= '9'))
 }
 
-// isString reports whether v is a JSON string.
-func isString(v json.RawMessage) bool {
-	return len(v) > 0 && v[0] == '"'
+// parseString reads a JSON string value. It reports false for any other
+// JSON type, so a number is never silently converted to text.
+func parseString(v json.RawMessage) (string, bool) {
+	var s string
+	if len(v) == 0 || v[0] != '"' || json.Unmarshal(v, &s) != nil {
+		return "", false
+	}
+	return s, true
 }
