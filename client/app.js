@@ -46,6 +46,7 @@ function connect() {
   statusEl.textContent = "connecting";
   ws = new WebSocket(WS_URL);
 
+  // Websocket start connection - send HELLO message 
   ws.addEventListener("open", () => {
     statusEl.textContent = "connected";
     ws.send(JSON.stringify({
@@ -58,6 +59,7 @@ function connect() {
     }));
   });
 
+  // Websocket - Message Received 
   ws.addEventListener("message", (event) => {
     const msg = JSON.parse(event.data);
     if (msg.type === "CAPTION_UPDATE") {
@@ -68,16 +70,19 @@ function connect() {
     }
   });
 
+  // Connection Closed - Attempt auto reconnection
   ws.addEventListener("close", () => {
     statusEl.textContent = "disconnected";
     // TODO: automatic reconnect after a short delay, using finalized resume state.
   });
 
+  // Websocket Error
   ws.addEventListener("error", () => {
     statusEl.textContent = "connection error";
   });
 }
 
+// Create buttons for Recall 
 for (const button of document.querySelectorAll("button[data-seconds]")) {
   button.addEventListener("click", () => {
     const seconds = Number(button.dataset.seconds);
