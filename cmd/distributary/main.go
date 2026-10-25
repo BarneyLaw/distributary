@@ -1,7 +1,7 @@
 // Command distributary is the LiveRecall server. The evaluator starts it
 // through solution_server.py, which passes --port; every other flag must
 // default to the configuration we want graded.
-package distributary
+package main
  
 import (
 	"context"
