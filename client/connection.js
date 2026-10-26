@@ -1,3 +1,4 @@
+// Creates a session "cookie" that contains the current client ID 
 function numericClientId() {
   const key = "liverecall-client-id";
   let value = sessionStorage.getItem(key);
@@ -8,32 +9,40 @@ function numericClientId() {
   return Number(value);
 }
 
+// Generate hello message
+function getHelloMsg(session, last_segment, last_revision, history_seconds){
+  return JSON.stringify({
+    type: "CLIENT_HELLO",
+    client_id: numericClientId(),
+    session,
+    last_segment: last_segment, // TODO: resume latest finalized state.
+    last_revision: last_revision,
+    history_seconds: history_seconds
+  })
+}
+
 // Report messages and status changes without knowing how the UI uses them.
 export function connect({ url, session, onMessage, onStatus }) {
   onStatus("connecting");
   const ws = new WebSocket(url);
 
+  // Web Socket opens - Send Initial Hello Message 
   ws.addEventListener("open", () => {
     onStatus("connected");
-    ws.send(JSON.stringify({
-      type: "CLIENT_HELLO",
-      client_id: numericClientId(),
-      session,
-      last_segment: 0, // TODO: resume latest finalized state.
-      last_revision: 0,
-      history_seconds: 30
-    }));
+    ws.send(getHelloMsg(session, 0, 0, 30));
   });
 
+  // Web socket receives incoming message - Pass to handler
   ws.addEventListener("message", (event) => {
     onMessage(JSON.parse(event.data));
   });
 
+  // Websocket connection closed - Attempt autoreconnect sequence (with last segment and revision HELLO)
   ws.addEventListener("close", () => {
     onStatus("disconnected");
-    // TODO: automatic reconnect using finalized resume state.
   });
 
+  // Websocket error - show connection error to user
   ws.addEventListener("error", () => {
     onStatus("connection error");
   });
