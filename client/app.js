@@ -3,7 +3,7 @@ import { connect } from "./connection.js";
 import { createUI } from "./ui.js";
 
 const captions = createCaptionStore();
-const ui = createUI();
+const ui = createUI({ getHistory: captions.getHistory });
 
 // Purge expired captions even when no updates arrive or the connection closes
 setInterval(captions.purgeExpired, 1000);

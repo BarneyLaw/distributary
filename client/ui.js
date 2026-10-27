@@ -1,5 +1,5 @@
 // DOM rendering and user interactions; caption acceptance belongs to the store.
-export function createUI() {
+export function createUI({ getHistory }) {
   const statusEl = document.getElementById("status");
   const historyEl = document.getElementById("live-history");
   const currentEl = document.getElementById("live-current");
@@ -15,8 +15,10 @@ export function createUI() {
   for (const button of document.querySelectorAll("button[data-seconds]")) {
     button.addEventListener("click", () => {
       const seconds = Number(button.dataset.seconds);
-      // TODO: show recent finalized captions from local state.
-      recallEl.textContent = `TODO: show finalized captions from the previous ${seconds} seconds using local state.`;
+      const history = getHistory(seconds);
+      recallEl.textContent = history.length
+        ? `Previous ${seconds} seconds:\n\n${history.map(caption => caption.text).join("\n")}`
+        : `No finalized captions from the previous ${seconds} seconds.`;
     });
   }
 

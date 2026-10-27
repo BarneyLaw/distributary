@@ -36,5 +36,20 @@ export function createCaptionStore() {
     return { key, caption };
   }
 
-  return { acceptUpdate, purgeExpired };
+  // Get recent finalized captions in segment order
+  function getHistory(seconds = retentionSeconds){
+    purgeExpired();
+    const historySeconds = Math.min(Math.max(seconds, 0), retentionSeconds);
+    if (historySeconds === 0) {
+      return [];
+    }
+
+    const cutoff = Date.now() / 1000 - historySeconds;
+    return Array.from(segments.values())
+      .filter(caption => caption.final && caption.source_ts >= cutoff)
+      .sort((a, b) => a.segment - b.segment)
+      .map(caption => ({ ...caption }));
+  }
+
+  return { acceptUpdate, purgeExpired, getHistory };
 }
