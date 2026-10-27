@@ -9,16 +9,20 @@
 <body>
   <h1>LiveRecall</h1>
   <p>Connection: <span id="status">disconnected</span></p>
-  <div id="live">
-    <div id="live-history"></div>
-    <div id="live-current" aria-live="polite" aria-atomic="true"></div>
-  </div>
-  <div>
-    <button data-seconds="30">What did I miss? (30 s)</button>
-    <button data-seconds="15">15 s</button>
-    <button data-seconds="60">60 s</button>
-  </div>
-  <div id="recall">Choose a time window to see recent finalized captions.</div>
+  <main id="classroom-layout">
+    <section id="live" aria-label="Live captions">
+      <div id="live-history"></div>
+      <div id="live-current" aria-live="polite" aria-atomic="true"></div>
+    </section>
+    <aside id="recall-panel" aria-label="Recent captions">
+      <div>
+        <button data-seconds="30">What did I miss? (30 s)</button>
+        <button data-seconds="15">15 s</button>
+        <button data-seconds="60">60 s</button>
+      </div>
+      <div id="recall">Choose a time window to see recent finalized captions.</div>
+    </aside>
+  </main>
   <script type="module" src="app.js"></script>
 </body>
 </html>
