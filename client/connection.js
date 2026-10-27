@@ -22,14 +22,15 @@ function getHelloMsg(session, last_segment, last_revision, history_seconds){
 }
 
 // Report messages and status changes without knowing how the UI uses them.
-export function connect({ url, session, onMessage, onStatus }) {
+export function connect({ url, session, onMessage, onStatus, getResumePosition }) {
   onStatus("connecting");
   const ws = new WebSocket(url);
 
   // Web Socket opens - Send Initial Hello Message 
   ws.addEventListener("open", () => {
     onStatus("connected");
-    ws.send(getHelloMsg(session, 0, 0, 30));
+    const { last_segment, last_revision } = getResumePosition();
+    ws.send(getHelloMsg(session, last_segment, last_revision, 60));
   });
 
   // Web socket receives incoming message - Pass to handler
@@ -40,6 +41,9 @@ export function connect({ url, session, onMessage, onStatus }) {
   // Websocket connection closed - Attempt autoreconnect sequence (with last segment and revision HELLO)
   ws.addEventListener("close", () => {
     onStatus("disconnected");
+    setTimeout(() => {
+      connect({ url, session, onMessage, onStatus, getResumePosition });
+    }, 1000);
   });
 
   // Websocket error - show connection error to user

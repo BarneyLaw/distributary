@@ -20,10 +20,17 @@ function wsMsgCallback(msg) {
     }
 
   } else if (msg.type === "HISTORY") {
-    // Merge incoming history with locacl caption store
+    // Merge incoming history with local caption store
+    for (const item of msg.items ?? []) {
+      if (!item.final) {
+        continue;
+      }
 
-    console.log(`HISTORY with ${msg.items?.length ?? 0} item(s)`, msg);
-    // TODO: merge history without stale/duplicate final captions.
+      const update = captions.acceptUpdate(item);
+      if (update) {
+        ui.renderCaption(update.key, update.caption);
+      }
+    }
   }
 }
 
@@ -33,5 +40,6 @@ connect({
   url: "ws://127.0.0.1:8765",
   session: "L1",
   onStatus: ui.setStatus,
+  getResumePosition: captions.getResumePosition,
   onMessage(msg) {wsMsgCallback(msg)}
 });

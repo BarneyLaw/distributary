@@ -3,6 +3,8 @@ export function createCaptionStore() {
   // TODO: bound retention when recent caption history is implemented.
   const segments = new Map();
   const retentionSeconds = 60;
+  let lastFinalSegment = 0;
+  let lastFinalRevision = 0;
 
   // Remove captions outside of the recent history window
   function purgeExpired(){
@@ -33,7 +35,19 @@ export function createCaptionStore() {
     const caption = { ...msg };
     segments.set(key, caption);
 
+    // Remember the newest finalized position even after captions expire
+    if (caption.final && (caption.segment > lastFinalSegment ||
+        (caption.segment === lastFinalSegment && caption.revision > lastFinalRevision))) {
+      lastFinalSegment = caption.segment;
+      lastFinalRevision = caption.revision;
+    }
+
     return { key, caption };
+  }
+
+  // Get the finalized position to send when reconnecting
+  function getResumePosition(){
+    return { last_segment: lastFinalSegment, last_revision: lastFinalRevision };
   }
 
   // Get recent finalized captions in segment order
@@ -51,5 +65,5 @@ export function createCaptionStore() {
       .map(caption => ({ ...caption }));
   }
 
-  return { acceptUpdate, purgeExpired, getHistory };
+  return { acceptUpdate, purgeExpired, getHistory, getResumePosition };
 }
