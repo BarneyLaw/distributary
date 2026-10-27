@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>LiveRecall Student Client</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="recall.css">
 </head>
 <body>
   <h1>LiveRecall</h1>
@@ -15,12 +16,43 @@
       <div id="live-current" aria-live="polite" aria-atomic="true"></div>
     </section>
     <aside id="recall-panel" aria-label="Recent captions">
-      <div>
-        <button data-seconds="30">What did I miss? (30 s)</button>
-        <button data-seconds="15">15 s</button>
-        <button data-seconds="60">60 s</button>
+      <button id="recall-toggle" type="button" aria-expanded="false" aria-controls="recall-content">
+        <span class="recall-heading-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2.6 7.4M3 4v7h7"/><path d="M12 7v5l3 2"/></svg>
+        </span>
+        <span class="recall-heading-copy">
+          <span class="recall-title">What did I miss?</span>
+          <span class="recall-subtitle">Review recent lecture captions</span>
+        </span>
+        <svg class="recall-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div id="recall-content" hidden>
+        <div class="recall-controls">
+          <div class="recall-window-options" role="group" aria-label="History window">
+            <button type="button" data-seconds="15" aria-pressed="false">15s</button>
+            <button type="button" data-seconds="30" aria-pressed="true">30s</button>
+            <button type="button" data-seconds="60" aria-pressed="false">60s</button>
+          </div>
+          <label for="recall-time-format">Time format
+            <span class="recall-select">
+              <select id="recall-time-format">
+                <option value="relative">Seconds ago</option>
+                <option value="local">Local time</option>
+              </select>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </label>
+        </div>
+        <p id="recall-summary"></p>
+        <div id="recall" role="list" aria-label="Caption snapshot"></div>
+        <div class="recall-footer">
+          <span id="recall-new" role="status" hidden></span>
+          <button id="recall-refresh" type="button" aria-label="Refresh caption snapshot" title="Refresh caption snapshot">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/></svg>
+            Refresh
+          </button>
+        </div>
       </div>
-      <div id="recall">Choose a time window to see recent finalized captions.</div>
     </aside>
   </main>
   <script type="module" src="app.js"></script>

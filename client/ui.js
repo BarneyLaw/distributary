@@ -4,7 +4,19 @@ export function createUI({ getHistory }) {
   const historyEl = document.getElementById("live-history");
   const currentEl = document.getElementById("live-current");
   const recallEl = document.getElementById("recall");
+  const recallToggle = document.getElementById("recall-toggle");
+  const recallContent = document.getElementById("recall-content");
+  const recallSummary = document.getElementById("recall-summary");
+  const recallNew = document.getElementById("recall-new");
+  const timeFormat = document.getElementById("recall-time-format");
+  const windowButtons = document.querySelectorAll("button[data-seconds]");
   const rows = new Map();
+  let recallSeconds = 30;
+  let snapshotTime = 0;
+  let snapshotKeys = new Set();
+  const localTime = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+  });
 
   function updateRow(row, caption) {
     row.classList.toggle("caption-final", caption.final);
@@ -12,18 +24,102 @@ export function createUI({ getHistory }) {
     row.textContent = caption.text;
   }
 
-  for (const button of document.querySelectorAll("button[data-seconds]")) {
+  // Show source timestamps in the browser's local time or as seconds ago
+  function formatTimestamp(sourceTs){
+    if (timeFormat.value === "local") {
+      return localTime.format(new Date(sourceTs * 1000));
+    }
+    const secondsAgo = Math.max(0, Math.floor(snapshotTime - sourceTs));
+    return `${secondsAgo}s ago`;
+  }
+
+  // Keep timestamps and availability current without changing the snapshot
+  function updateRecall(){
+    if (recallContent.hidden) {
+      return;
+    }
+
+    const newCount = getHistory(recallSeconds).filter(caption =>
+      !snapshotKeys.has(JSON.stringify([caption.session, caption.segment]))
+    ).length;
+    const message = `${newCount} new caption${newCount === 1 ? "" : "s"} available`;
+    if (recallNew.textContent !== message) {
+      recallNew.textContent = message;
+    }
+    recallNew.hidden = newCount === 0;
+  }
+
+  // Render each finalized segment with its timestamp beside the text
+  function createRecallRow(caption){
+    const row = document.createElement("div");
+    row.className = "recall-row";
+    row.setAttribute("role", "listitem");
+
+    const timestamp = document.createElement("time");
+    const date = new Date(caption.source_ts * 1000);
+    timestamp.dateTime = date.toISOString();
+    timestamp.title = date.toLocaleString();
+    timestamp.dataset.sourceTs = caption.source_ts;
+    timestamp.textContent = formatTimestamp(caption.source_ts);
+
+    const text = document.createElement("p");
+    text.className = "recall-text";
+    text.textContent = caption.text;
+    row.append(timestamp, text);
+    return row;
+  }
+
+  // Take a fresh snapshot only when opening, refreshing or changing the window
+  function takeSnapshot(){
+    snapshotTime = Date.now() / 1000;
+    const history = getHistory(recallSeconds);
+    snapshotKeys = new Set(history.map(caption => JSON.stringify([caption.session, caption.segment])));
+    recallSummary.textContent = `Previous ${recallSeconds} seconds · captured at ${localTime.format(new Date(snapshotTime * 1000))}`;
+    recallEl.replaceChildren();
+
+    for (const caption of history) {
+      recallEl.appendChild(createRecallRow(caption));
+    }
+    if (!history.length) {
+      const empty = document.createElement("p");
+      empty.className = "recall-empty";
+      empty.textContent = `No finalized captions from the previous ${recallSeconds} seconds.`;
+      recallEl.appendChild(empty);
+    }
+
+    recallEl.scrollTop = 0;
+    for (const button of windowButtons) {
+      button.setAttribute("aria-pressed", String(Number(button.dataset.seconds) === recallSeconds));
+    }
+    updateRecall();
+  }
+
+  recallToggle.addEventListener("click", () => {
+    recallContent.hidden = !recallContent.hidden;
+    recallToggle.setAttribute("aria-expanded", String(!recallContent.hidden));
+    if (!recallContent.hidden) {
+      recallSeconds = 30;
+      takeSnapshot();
+    }
+  });
+
+  document.getElementById("recall-refresh").addEventListener("click", takeSnapshot);
+  timeFormat.addEventListener("change", () => {
+    for (const timestamp of recallEl.querySelectorAll("time")) {
+      timestamp.textContent = formatTimestamp(Number(timestamp.dataset.sourceTs));
+    }
+  });
+
+  for (const button of windowButtons) {
     button.addEventListener("click", () => {
-      const seconds = Number(button.dataset.seconds);
-      const history = getHistory(seconds);
-      recallEl.textContent = history.length
-        ? `Previous ${seconds} seconds:\n\n${history.map(caption => caption.text).join("\n")}`
-        : `No finalized captions from the previous ${seconds} seconds.`;
+      recallSeconds = Number(button.dataset.seconds);
+      takeSnapshot();
     });
   }
 
   // Update the captions shown on screen 
   function renderCaption(key, caption) {
+    updateRecall();
     const existing = rows.get(key);
     if (existing) {
       updateRow(existing.row, caption);
@@ -92,5 +188,5 @@ export function createUI({ getHistory }) {
 
 
   // Expose 
-  return {setStatus, renderCaption};
+  return {setStatus, renderCaption, updateRecall};
 }

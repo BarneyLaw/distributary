@@ -6,7 +6,11 @@ const captions = createCaptionStore();
 const ui = createUI({ getHistory: captions.getHistory });
 
 // Purge expired captions even when no updates arrive or the connection closes
-setInterval(captions.purgeExpired, 1000);
+// Update the current recall window length shown on UI
+setInterval(() => {
+  captions.purgeExpired();
+  ui.updateRecall();
+}, 1000);
 
 
 // Protocol Logic - Runs on every message received by websocket 
