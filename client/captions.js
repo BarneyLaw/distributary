@@ -2,9 +2,25 @@
 export function createCaptionStore() {
   // TODO: bound retention when recent caption history is implemented.
   const segments = new Map();
+  const retentionSeconds = 60;
+
+  // Remove captions outside of the recent history window
+  function purgeExpired(){
+    const cutoff = Date.now() / 1000 - retentionSeconds;
+    for (const [key, caption] of segments) {
+      if (caption.source_ts < cutoff) {
+        segments.delete(key);
+      }
+    }
+  }
 
   // Attempt to include update information to caption store - returns null if not saved
   function acceptUpdate(msg){
+    // Drop expired captions even if they are no longer in the store
+    if (msg.source_ts < Date.now() / 1000 - retentionSeconds) {
+      return null;
+    }
+
     const key = JSON.stringify([msg.session, msg.segment]);
     const existing = segments.get(key);
 
@@ -20,5 +36,5 @@ export function createCaptionStore() {
     return { key, caption };
   }
 
-  return { acceptUpdate };
+  return { acceptUpdate, purgeExpired };
 }

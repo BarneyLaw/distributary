@@ -5,6 +5,9 @@ import { createUI } from "./ui.js";
 const captions = createCaptionStore();
 const ui = createUI();
 
+// Purge expired captions even when no updates arrive or the connection closes
+setInterval(captions.purgeExpired, 1000);
+
 
 // Protocol Logic - Runs on every message received by websocket 
 function wsMsgCallback(msg) {
