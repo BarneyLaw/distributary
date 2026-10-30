@@ -49,6 +49,7 @@ func NewHub(session *Session) *hub {
 }
 
 // Establishes one-connection-per-client.
+// AddClient is a blocking function. Call it using go routine
 func (h *hub) AddClient(connection *websocket.Conn) error {
 	h.mu.Lock()
 	if h.shutdown.Err() != nil {
@@ -68,9 +69,6 @@ func (h *hub) AddClient(connection *websocket.Conn) error {
 	// Spawn threads for client
 	h.clients.Add(1)
 	h.mu.Unlock()
-
-	stop := c.keepalive()
-	defer stop()
 
 	ctx, cancel := context.WithCancel(context.Background())
 

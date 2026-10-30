@@ -60,7 +60,11 @@ func (c *client) readPump(wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 }
 
 func (c *client) writePump(wg *sync.WaitGroup, ctx context.Context) {
+	keepAliveCtx, keepAliveCancel := context.WithCancel(context.Background())
+	stop := c.keepalive(keepAliveCancel)
+
 	defer func() {
+		stop()
 		c.close()
 		wg.Done()
 	}()
@@ -74,6 +78,8 @@ func (c *client) writePump(wg *sync.WaitGroup, ctx context.Context) {
 			// Do nothing, proceed
 		case <-ctx.Done():
 			return // Reader exit, writer must exit too
+		case <-keepAliveCtx.Done():
+			return // Keep alive ping fails, writer must exit
 		case <-c.hub.shutdown.Done():
 			return // Hub shutdown, all clients shall terminate
 		}
@@ -117,12 +123,15 @@ func (c *client) ping(num uint64) error {
 	return err
 }
 
-func (c *client) keepalive() (stop func()) {
+func (c *client) keepalive(ctxCancel context.CancelFunc) (stop func()) {
 	done := make(chan struct{})
 
 	go func() {
 		t := time.NewTicker(c.hub.pingInterval)
-		defer t.Stop()
+		defer func() {
+			t.Stop()
+			ctxCancel()
+		}()
 
 		for {
 			select {
