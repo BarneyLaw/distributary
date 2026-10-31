@@ -3,15 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>LiveRecall Student Client</title>
+  <title>LiveRecall | Live Lecture Captions</title>
+  <meta name="description" content="Follow live lecture captions and review recent captions to catch up on what you missed.">
+  <meta name="application-name" content="LiveRecall">
+  <meta name="author" content="Distributary">
+  <meta name="theme-color" content="#f1f5f9">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" type="image/svg+xml" sizes="any" href="logo.svg">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="recall.css">
 </head>
 <body>
-  <h1>LiveRecall</h1>
+  <header id="app-header">
+    <img src="logo.svg" width="48" height="48" alt="">
+    <h1>LiveRecall</h1>
+  </header>
   <main id="classroom-layout">
-    <section id="live" class="live-empty" aria-label="Live captions">
-      <p id="live-status"><span id="status" data-status="disconnected">disconnected</span></p>
+    <section id="live" class="live-empty" aria-labelledby="live-title">
+      <header id="live-header">
+        <h2 id="live-title">Live Caption</h2>
+        <span id="status" data-status="disconnected">disconnected</span>
+      </header>
       <div id="live-history"></div>
       <div id="live-current" aria-live="polite" aria-atomic="true">
         <p id="live-placeholder">Waiting for lecture captions…</p>
@@ -57,6 +69,7 @@
       </div>
     </aside>
   </main>
+  <footer id="site-footer">by Distributary</footer>
   <script type="module" src="app.js"></script>
 </body>
 </html>

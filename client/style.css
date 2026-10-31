@@ -1,4 +1,35 @@
-body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+html {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 1200px;
+  min-height: calc(100vh - 4rem);
+  margin: 2rem auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+#app-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin: 0 0 .5rem;
+}
+
+#app-header img { flex-shrink: 0; }
+
+#app-header h1 {
+  margin: 0;
+  color: #172033;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -.04em;
+  line-height: 1.15;
+}
 
 #status {
   display: inline-flex;
@@ -27,7 +58,16 @@ body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto;
 #status[data-status="disconnected"],
 #status[data-status="connection error"] { color: #b91c1c; background: #fee2e2; }
 
-#live-status { margin: 0; }
+#live-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e8edf5;
+}
+
+#live-title { margin: 0; color: #172033; font-size: 1rem; font-weight: 650; line-height: 1.4; }
 
 #classroom-layout {
   display: grid;
@@ -39,11 +79,10 @@ body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto;
 
 #live {
   min-width: 0;
-  border: 1px solid #d1d5db;
-  border-radius: .75rem;
-}
-
-#live {
+  border: 1px solid #dfe5ee;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 4px 20px rgb(23 32 51 / 5%);
   min-height: 19rem;
   display: flex;
   flex-direction: column;
@@ -100,6 +139,8 @@ body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto;
 .caption-provisional { color: #6b7280; font-weight: 600; }
 
 .caption-final { color: #111827; font-weight: 600; }
+
+#site-footer { margin-top: auto; padding-top: 2rem; color: #667085; font-size: .75rem; text-align: center; }
 
 @media (min-width: 960px) {
   #classroom-layout {
