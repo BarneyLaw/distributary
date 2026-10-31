@@ -1,8 +1,10 @@
 // DOM rendering and user interactions; caption acceptance belongs to the store.
 export function createUI({ getHistory }) {
   const statusEl = document.getElementById("status");
+  const liveEl = document.getElementById("live");
   const historyEl = document.getElementById("live-history");
   const currentEl = document.getElementById("live-current");
+  const placeholderEl = document.getElementById("live-placeholder");
   const recallEl = document.getElementById("recall");
   const recallToggle = document.getElementById("recall-toggle");
   const recallContent = document.getElementById("recall-content");
@@ -119,6 +121,8 @@ export function createUI({ getHistory }) {
 
   // Update the captions shown on screen 
   function renderCaption(key, caption) {
+    placeholderEl.hidden = true;
+    liveEl.classList.remove("live-empty");
     updateRecall();
     const existing = rows.get(key);
     if (existing) {

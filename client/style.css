@@ -44,7 +44,7 @@ body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto;
 }
 
 #live {
-  min-height: 22rem;
+  min-height: 19rem;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -55,7 +55,7 @@ body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto;
 
 #live-history {
   position: relative;
-  height: 10rem;
+  height: 7rem;
   flex-shrink: 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -77,6 +77,17 @@ body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto;
 }
 
 #live-current { min-height: 7rem; }
+
+#live.live-empty #live-history { display: none; }
+
+#live.live-empty #live-current {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+#live-placeholder { margin: 0; color: #6b7280; font-size: clamp(1.125rem, 3vw, 1.5rem); line-height: 1.5; }
 
 .caption-line { line-height: 1.5; overflow-wrap: anywhere; }
 
