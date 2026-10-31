@@ -1,22 +1,20 @@
 # Protocol Specification
 
-This document describes the `internal/protocol` package I wrote: the message structs, the decoders and encoders, the validation rules, and the ping/pong ack helpers. It covers what each function takes, what it returns, and what a returned value is guaranteed to contain.
+This document describes the `internal/protocol` package: the message structs, the decoders and encoders, the validation rules, and the ping/pong ack helpers. It covers what each function takes, what it returns, and what a returned value is guaranteed to contain.
 
 - **Import:** `github.com/BarneyLaw/distributary/internal/protocol`
 - **Code:** [`internal/protocol/`](../internal/protocol/)
 - **Tests:** `go test ./internal/protocol`
 
-If you need a message shape, field name or guarantee changed, let me know rather than editing the package. The public harness and the hidden evaluator depend on spec section 4 exactly, so I want to keep every change checked against it.
-
 ## 1. Scope
 
 The package only describes, decodes and encodes messages. It does no I/O, starts no goroutines and keeps no state, so every function is safe to call from any goroutine.
 
-It deliberately does **not** check anything that needs caption state, such as whether a segment is already final or a revision is stale. Those decisions are outside this package.
+It does not check anything that needs caption state, such as whether a segment is already final or a revision is stale. Those decisions are outside the protocol package.
 
 ## 2. Messages
 
-All messages are JSON objects sent as WebSocket text frames, each with a `"type"` field. Each `CAPTION_UPDATE` carries the whole text of one revision, not a diff or a single word.
+All messages are in the form of JSON objects sent as WebSocket text frames, each with a `"type"` field. Each `CAPTION_UPDATE` carries the text of an entire revision corresponding to a segment.
 
 | `type` | Direction | Go type |
 | --- | --- | --- |
@@ -51,7 +49,7 @@ The type strings are available as the constants `TypeSourceHello`, `TypeCaptionU
 | `segment` | `Segment` | `int64` | yes | Caption segment, ≥ 1 |
 | `revision` | `Revision` | `int64` | yes | Version within the segment, ≥ 1 |
 | `source_ts` | `SourceTS` | `float64` | yes | Unix seconds on the source's clock, > 0 |
-| `final` | `Final` | `bool` | yes | `true` means the segment is complete |
+| `final` | `Final` | `bool` | yes | `true` means the segment is complete, `false` means that there are more incoming revisions for the segment.|
 | `text` | `Text` | `string` | yes | Whole caption text of this revision. May be empty. |
 
 ### SOURCE_DONE
@@ -64,7 +62,7 @@ The type strings are available as the constants `TypeSourceHello`, `TypeCaptionU
 | --- | --- | --- | --- | --- |
 | `session` | `Session` | `string` | no | Session id |
 | `source_ts` | `SourceTS` | `float64` | no | Send time |
-| `segments` | `Segments` | `int64` | no | Number of finalized segments emitted |
+| `segments` | `Segments` | `int64` | no | Number of final segments emitted |
 
 The spec marks this as a test-control message.
 
@@ -81,7 +79,7 @@ The spec marks this as a test-control message.
 | `session` | `Session` | `string` | no | `""` | Session id |
 | `last_segment` | `LastSegment` | `int64` | no | 0 | Newest finalized segment the client holds, ≥ 0 |
 | `last_revision` | `LastRevision` | `int64` | no | 0 | Revision of that final, ≥ 0 |
-| `history_seconds` | `HistorySeconds` | `float64` | no | 0 | Recovery window requested, clamped to 0–60 |
+| `history_seconds` | `HistorySeconds` | `float64` | no | 0 | Recovery window requested, limited to 0–60 |
 
 Per the spec, a new client sends `last_segment = 0` and `last_revision = 0`.
 
@@ -98,6 +96,8 @@ Per the spec, a new client sends `last_segment = 0` and `last_revision = 0`.
 `EncodeHistory` builds this frame from already-encoded caption bytes. The `History` struct is there for parsing a `HISTORY` frame, for example in tests.
 
 ## 3. API
+
+Decoders are needed because network carries bytes, but the server's logic needs Go values. These decoders allow you to convert between the two.
 
 ```go
 func DecodeHello(raw []byte) (any, error)         // *SourceHello | *ClientHello
@@ -146,12 +146,18 @@ Joins already-encoded captions as `{"type":"HISTORY","items":[` + items separate
 
 ### EncodeAck and DecodeAck
 
-These put a sequence number into a WebSocket ping payload and read it back from the pong.
+These helpers put a sequence number in a WebSocket ping payload and read it back from the pong, which lets the server detect slow readers.
 
 - `EncodeAck(seq)` returns 8 bytes: `seq` as a big-endian `uint64`.
 - `DecodeAck(payload)` returns that number. A payload that is not exactly 8 bytes returns `ErrMalformed`.
 
-I added these because harness clients never send application messages after their hello, so there is no application-level ack to read. WebSocket libraries reply to a ping with a pong carrying the same payload (RFC 6455 §5.5.3), and they do it when their reader reaches the ping in the stream. So if the payload holds the number of messages sent so far, the number that comes back in the pong is how many messages the client has read.
+```text
+Server sends:   msg1  msg2  msg3  [ping: 3]  msg4  msg5  [ping: 5]
+Client reads:   msg1  msg2  msg3  [ping: 3] → replies pong: 3
+                (client is slow, hasn't reached msg4 yet)
+
+Server knows:   sent = 5, acked = 3  →  2 messages in flight
+```
 
 ## 4. Errors
 
@@ -209,8 +215,3 @@ A value returned **without error** already satisfies these.
 - Compatibility tests decode the exact JSON that the harness's `caption_source.py` and `load_clients.py` send, and check that `Encode` and `EncodeHistory` output parses the way the harness reads it.
 - `FuzzDecode` feeds random input to both decoders and checks they never panic, only return the errors above, and that accepted values meet the guarantees in section 5.
 
-```sh
-go test ./internal/protocol                                          # all tests
-go test -race -cover ./internal/protocol                             # race detector and coverage
-go test ./internal/protocol -run='^$' -fuzz=FuzzDecode -fuzztime=60s # fuzzing
-```
