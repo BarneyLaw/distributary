@@ -1,8 +1,8 @@
 package session
 
 import (
-	"time"
 	"sync"
+	"time"
 )
 
 // Config holds the configuration for a session.
@@ -20,9 +20,9 @@ type Config struct {
 // DefaultConfig returns the configuration used when the evaluater starts.
 func DefaultConfig() Config {
 	return Config{
-		Retention:  time.Second * 90,
-		MaxFinals:  1024,
-		MaxActive:  16,
+		Retention: time.Second * 90,
+		MaxFinals: 1024,
+		MaxActive: 16,
 	}
 }
 
@@ -32,7 +32,7 @@ type Session struct {
 	// mu protects all fields below.
 	mu sync.RWMutex
 
-	// finals holds the most recent finals, in a ring buffer. 
+	// finals holds the most recent finals, in a ring buffer.
 	// The oldest final is at oldestSeq, the newest at newestSeq.
 	finals ring
 	// finalized maps segment -> fseq of the final in finals, if any.
@@ -46,7 +46,7 @@ type Session struct {
 	// newestTS is the timestamp of the newest update ever seen, final or not.
 	// It is the only clock the session usesm for eviction and the HISTORY window
 	newestTS float64
-	// changed is closed and replaced on every Accepted update. 
+	// changed is closed and replaced on every Accepted update.
 	// Pick hands the current one to each client to wait on
 	changed chan struct{}
 }
@@ -64,11 +64,11 @@ func New(cfg Config) *Session {
 		cfg.MaxActive = def.MaxActive
 	}
 	return &Session{
-		cfg: 		cfg,
-		finals: 	newRing(cfg.MaxFinals),
-		finalized: 	make(map[int64]uint64),
-		active: 	make(map[int64]*caption),
-		changed: 	make(chan struct{}),
+		cfg:       cfg,
+		finals:    newRing(cfg.MaxFinals),
+		finalized: make(map[int64]uint64),
+		active:    make(map[int64]*caption),
+		changed:   make(chan struct{}),
 	}
 }
 

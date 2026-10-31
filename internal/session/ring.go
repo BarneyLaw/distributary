@@ -12,21 +12,21 @@ package session
 //
 // ring is not safe for concurrent use; Session's mutex protects it.
 type ring struct {
-	buf 	[]*caption
-	oldest	uint64
-	next	uint64
+	buf    []*caption
+	oldest uint64
+	next   uint64
 }
 
 func newRing(capacity int) ring {
 	return ring{
-		buf: make([]*caption, capacity),
+		buf:    make([]*caption, capacity),
 		oldest: 1,
-		next: 1,
+		next:   1,
 	}
 }
 
 // len is the number of finals held.
-func (r *ring) len() int { 
+func (r *ring) len() int {
 	return int(r.next - r.oldest)
 }
 
@@ -36,8 +36,8 @@ func (r *ring) full() bool {
 }
 
 // newestSeq is the fseq of the newest final ever pushed, or 0 if none.
-func (r *ring) newestSeq() uint64 { 
-	return r.next - 1 
+func (r *ring) newestSeq() uint64 {
+	return r.next - 1
 }
 
 // oldestSeq is the fseq of the oldest final still held.
@@ -54,7 +54,7 @@ func (r *ring) push(c *caption) uint64 {
 		panic("sessionL ring.push on full ring")
 	}
 	fseq := r.next
-	r.buf[fseq % uint64(len(r.buf))] = c
+	r.buf[fseq%uint64(len(r.buf))] = c
 	r.next++
 	return fseq
 }
@@ -83,5 +83,5 @@ func (r *ring) get(fseq uint64) *caption {
 		return nil
 	}
 
-	return r.buf[fseq % uint64(len(r.buf))]
+	return r.buf[fseq%uint64(len(r.buf))]
 }

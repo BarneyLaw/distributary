@@ -29,13 +29,13 @@ func (s *Session) Apply(u *protocol.CaptionUpdate) Verdict {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 1. If the segment is already final, report AlreadyFinal. 
+	// 1. If the segment is already final, report AlreadyFinal.
 	// This is the only rule that does not depend on the source_ts of the update.
 	if _, ok := s.finalized[u.Segment]; ok {
 		return AlreadyFinal
 	}
 
-	// 2. if the segment is at or below the highest segment 
+	// 2. if the segment is at or below the highest segment
 	// whose final has been evicted from the ring, report TooOld.
 	if u.Segment <= s.floor {
 		return TooOld
@@ -96,9 +96,8 @@ func (s *Session) evictOldestFinal() {
 	delete(s.finalized, c.segment)
 	if c.segment > s.floor {
 		s.floor = c.segment
-	}	
+	}
 }
-
 
 // storeProvisional keeps only the newest provisional per segment, for at
 // most MaxActive segments.
@@ -119,7 +118,7 @@ func lowestSegment(m map[int64]*caption) int64 {
 	for seg := range m {
 		if first || seg < lowest {
 			lowest = seg
-			first = false			
+			first = false
 		}
 	}
 	return lowest

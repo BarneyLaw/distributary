@@ -1,6 +1,5 @@
 package session
 
-
 type Verdict int
 
 const (

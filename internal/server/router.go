@@ -16,18 +16,17 @@ import (
 	"log"
 	"net/http"
 	"time"
- 
-	"github.com/gorilla/websocket"
- 
-	"github.com/BarneyLaw/distributary/internal/protocol"
 
+	"github.com/gorilla/websocket"
+
+	"github.com/BarneyLaw/distributary/internal/protocol"
 )
 
 // Defaults
 const (
-	DefaultHelloTimeout = 5 * time.Second
+	DefaultHelloTimeout   = 5 * time.Second
 	DefaultMaxMessageSize = 1 << 20 // 1 MiB
-	controlTimeout = 5 * time.Second
+	controlTimeout        = 5 * time.Second
 )
 
 // Close codes sent by the router
@@ -42,7 +41,7 @@ type SourceHandler interface {
 	Handle(ws *websocket.Conn, hello *protocol.SourceHello)
 }
 
-// ClientHandler runs one student connection until it ends, and returns an error 
+// ClientHandler runs one student connection until it ends, and returns an error
 // without serving if it can no longer accept clients (for example during shutdowns).
 // internal/fanout implements this interface.
 type ClientHandler interface {
@@ -53,17 +52,17 @@ type ClientHandler interface {
 type Router struct {
 	Sources SourceHandler
 	Clients ClientHandler
-	Log    *log.Logger
+	Log     *log.Logger
 
 	// Static, if set, serves plain (non-WebSocket) HTTP requests, such as the
 	// browser client's files. If nil, they get 426 Upgrade Required.
 	Static http.Handler
 
-	// HelloTimeout is the maximum time to wait for a hello message. 
+	// HelloTimeout is the maximum time to wait for a hello message.
 	// If zero, a default is used.
 	HelloTimeout time.Duration
 
-	// MaxMessageSize is the maximum size of a WebSocket message. 
+	// MaxMessageSize is the maximum size of a WebSocket message.
 	// If zero, a default is used.
 	MaxMessageSize int64
 }
@@ -99,7 +98,7 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rt.Log.Printf("rejected %s: %v", r.RemoteAddr, err)
 		closeWith(ws, closePolicyViolation, "Expected SOURCE_HELLO or CLIENT_HELLO")
 		return
-	} 
+	}
 
 	switch h := hello.(type) {
 	case *protocol.SourceHello:
@@ -111,7 +110,6 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-
 
 // readHello reads the first message under HelloTimeout, then clears the read
 // deadline so each handler can set its own. Pings that arrive while waiting
@@ -140,7 +138,7 @@ func (rt *Router) helloTimeout() time.Duration {
 	}
 	return DefaultHelloTimeout
 }
- 
+
 func (rt *Router) maxMessageSize() int64 {
 	if rt.MaxMessageSize > 0 {
 		return rt.MaxMessageSize
@@ -152,4 +150,3 @@ func closeWith(ws *websocket.Conn, code int, reason string) {
 	msg := websocket.FormatCloseMessage(code, reason)
 	_ = ws.WriteControl(websocket.CloseMessage, msg, time.Now().Add(controlTimeout))
 }
-

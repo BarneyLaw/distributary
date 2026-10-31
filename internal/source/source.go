@@ -12,15 +12,15 @@ import (
 )
 
 type Handler struct {
-	session 	*session.Session
-	log     	*log.Logger
+	session *session.Session
+	log     *log.Logger
 
-	mu 			sync.Mutex
-	socket  	*websocket.Conn // currently active source connection, or nil if none
+	mu     sync.Mutex
+	socket *websocket.Conn // currently active source connection, or nil if none
 
-	verdicts	[6]atomic.Uint64
-	malformed 	atomic.Uint64
-	done 		atomic.Uint64
+	verdicts  [6]atomic.Uint64
+	malformed atomic.Uint64
+	done      atomic.Uint64
 }
 
 func New(s *session.Session, log *log.Logger) *Handler {
@@ -65,7 +65,7 @@ func (h *Handler) Handle(ws *websocket.Conn, hello *protocol.SourceHello) {
 		switch m := msg.(type) {
 		case *protocol.CaptionUpdate:
 			h.verdicts[h.session.Apply(m)].Add(1)
-		
+
 		case *protocol.SourceDone:
 			h.done.Add(1)
 			h.log.Printf("source done: %d segments; %s", m.Segments, h.Stats())
@@ -109,11 +109,11 @@ type Stats struct {
 	Stale        uint64
 	AlreadyFinal uint64
 	TooOld       uint64
- 
+
 	Malformed uint64 // frames that failed protocol decoding
 	Done      uint64 // SOURCE_DONE messages received
 }
- 
+
 // Stats returns the current counters.
 func (h *Handler) Stats() Stats {
 	return Stats{
@@ -126,12 +126,8 @@ func (h *Handler) Stats() Stats {
 		Done:         h.done.Load(),
 	}
 }
- 
+
 func (s Stats) String() string {
 	return fmt.Sprintf("accepted=%d duplicate=%d stale=%d already_final=%d too_old=%d malformed=%d done=%d",
 		s.Accepted, s.Duplicate, s.Stale, s.AlreadyFinal, s.TooOld, s.Malformed, s.Done)
 }
-
-
-
-

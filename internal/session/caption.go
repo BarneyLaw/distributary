@@ -9,10 +9,10 @@ import (
 // It is never modified after newCaption returns. That is what lets any
 // number of client goroutines read it, and send its frame, without a lock.
 type caption struct {
-	segment int64
+	segment  int64
 	revision int64
 	sourceTS float64
-	final bool
+	final    bool
 
 	// frame is the exact CAPTION_UPDATE JSON every client is sent. It is
 	// encoded once here and the same slice is handed to every client, so it

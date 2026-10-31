@@ -8,7 +8,7 @@ type Cursor struct {
 	finalSeq   uint64          // fseq of the last final handed out (0 = none)
 	minSegment int64           // CLIENT_HELLO's last_segment: never send finals at or below it
 	sentRev    map[int64]int64 // segment -> last provisional revision handed out
-								// (seeded by Join with the current revisions)
+	// (seeded by Join with the current revisions)
 }
 
 // Pick returns up to max frames for one client and advances its cursor:
@@ -33,14 +33,13 @@ type Cursor struct {
 func (s *Session) Pick(cur *Cursor, max int, provisionals bool) (frames [][]byte, wake <-chan struct{}, behind bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	wake = s.changed
 	if max <= 0 {
 		return nil, wake, false
 	}
 
-
-	if cur.finalSeq + 1 < s.finals.oldestSeq() && s.floor > cur.minSegment {
+	if cur.finalSeq+1 < s.finals.oldestSeq() && s.floor > cur.minSegment {
 		return nil, wake, true
 	}
 

@@ -1,7 +1,7 @@
 package session
 
 import "github.com/BarneyLaw/distributary/internal/protocol"
- 
+
 // Join is called once per connection, after CLIENT_HELLO. It returns the
 // complete HISTORY frame to send first, and the cursor to use from then on.
 //
@@ -28,7 +28,7 @@ func (s *Session) Join(h *protocol.ClientHello) (history []byte, cur Cursor) {
 	//   - return protocol.EncodeHistory(frames), cursor
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	var frames [][]byte
 	if h.HistorySeconds > 0 {
 		cutoff := s.newestTS - h.HistorySeconds
