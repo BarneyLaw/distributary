@@ -1,6 +1,33 @@
 body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
 
-#status { font-weight: 700; }
+#status {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .35rem .75rem;
+  border-radius: 999px;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+#status::before {
+  content: "";
+  width: .5rem;
+  height: .5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+#status[data-status="connected"] { color: #15803d; background: #dcfce7; }
+
+#status[data-status="connecting"] { color: #a16207; background: #fef3c7; }
+
+#status[data-status="disconnected"],
+#status[data-status="connection error"] { color: #b91c1c; background: #fee2e2; }
+
+#live-status { margin: 0; }
 
 #classroom-layout {
   display: grid;

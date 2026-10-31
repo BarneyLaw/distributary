@@ -184,6 +184,7 @@ export function createUI({ getHistory }) {
   // Update connection status label shown on screen
   function setStatus(newStatus){
     statusEl.textContent = newStatus;
+    statusEl.dataset.status = newStatus;
   }
 
 
