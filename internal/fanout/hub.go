@@ -24,9 +24,14 @@ type hub struct {
 	clients *sync.WaitGroup
 
 	maxMessageSize int
+	maxInFlight    uint64
+
 	pingInterval   time.Duration
 	pongTimeout    time.Duration
 	controlTimeout time.Duration
+
+	queueDelayTreshold time.Duration
+	modeThreshold      uint8 // Determine after how many queueing delay observations that a client mode can be changed.
 
 	shutdown     context.Context
 	shutdownFunc context.CancelFunc
@@ -41,14 +46,17 @@ type hub struct {
 func NewHub(session *session.Session) *hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hub{
-		sess:           session,
-		clients:        &sync.WaitGroup{},
-		maxMessageSize: 1 << 20, // 1 MiB
-		pingInterval:   20 * time.Second,
-		pongTimeout:    20 * time.Second,
-		controlTimeout: 5 * time.Second,
-		shutdown:       ctx,
-		shutdownFunc:   cancel,
+		sess:               session,
+		clients:            &sync.WaitGroup{},
+		maxMessageSize:     1 << 20, // 1 MiB
+		maxInFlight:        4,
+		pingInterval:       20 * time.Second,
+		pongTimeout:        20 * time.Second,
+		controlTimeout:     5 * time.Second,
+		queueDelayTreshold: 30 * time.Millisecond,
+		modeThreshold:      2,
+		shutdown:           ctx,
+		shutdownFunc:       cancel,
 	}
 }
 
@@ -64,12 +72,20 @@ func (h *hub) AddClient(connection *websocket.Conn, hello *protocol.ClientHello)
 	connection.SetReadLimit(int64(h.maxMessageSize))
 
 	c := &client{
-		hub:      h,
-		conn:     connection,
-		hello:    hello,
-		sentSeq:  0,
-		ackedSeq: 0,
-		acked:    make(chan struct{}),
+		hub:            h,
+		conn:           connection,
+		hello:          hello,
+		sentSeq:        0,
+		ackedSeq:       0,
+		timeSent:       time.Time{},
+		timeAcked:      time.Time{},
+		sampleRTT:      0 * time.Millisecond,
+		sRTT:           0 * time.Millisecond,
+		minRTT:         time.Hour,
+		queueDelay:     0 * time.Millisecond,
+		thresholdCount: 0,
+		isDegraded:     false,
+		acked:          make(chan struct{}),
 	}
 
 	// Spawn threads for client
