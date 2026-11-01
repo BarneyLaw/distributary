@@ -244,7 +244,7 @@ func keepalive(ws *websocket.Conn) (stop func()) {
 }
 
 func extendReadDeadline(ws *websocket.Conn) {
-	ws.SetWriteDeadline(time.Now().Add(pingInterval + pongTimeout))
+	ws.SetReadDeadline(time.Now().Add(pingInterval + pongTimeout))
 }
 
 func closeWith(ws *websocket.Conn, reason string) {

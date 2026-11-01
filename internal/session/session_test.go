@@ -466,6 +466,17 @@ func TestPickBehindWhenNeededFinalWasEvicted(t *testing.T) {
 	wantItems(t, "a client that keeps up is never behind", pick(t, s, &current, 10, true), finals(6, 8))
 }
 
+// A client that reports a last_segment ahead of the ring, whose unseen
+// finals then get evicted, is not behind (it never needed them), so Pick
+// must skip past the evicted fseqs rather than read them.
+func TestPickSkipsEvictedFinalsTheClientNeverNeeded(t *testing.T) {
+	s := session.New(session.Config{Retention: time.Hour, MaxFinals: 2, MaxActive: 16})
+	feed(t, s, 1, 3, 100, 1)
+	_, cur := s.Join(hello(5, 60)) // cursor at fseq 3; client already has up to segment 5
+	feed(t, s, 4, 6, 100, 1)       // evicts fseq 4 (segment 4) before the client picks
+	wantItems(t, "only segment 6 is new to this client", pick(t, s, &cur, 10, true), finals(6, 6))
+}
+
 func TestRejoinResumesWithoutGapOrDuplicate(t *testing.T) {
 	s := session.New(big)
 	_, cur := s.Join(hello(0, 30))
