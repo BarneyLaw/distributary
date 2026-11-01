@@ -7,7 +7,7 @@ import (
 )
 
 func TestEncodeMatchesSpec(t *testing.T) {
-	c := CaptionUpdate{
+	caption := CaptionUpdate{
 		Session:  "L1",
 		Segment:  42,
 		Revision: 3,
@@ -15,24 +15,24 @@ func TestEncodeMatchesSpec(t *testing.T) {
 		Final:    true,
 		Text:     "TCP uses cumulative acknowledgements.",
 	}
-	if got := string(c.Encode()); got != specCaption {
+	if got := string(caption.Encode()); got != specCaption {
 		t.Errorf("Encode =\n%s\nwant\n%s", got, specCaption)
 	}
 }
 
 func TestEncodeRoundTrip(t *testing.T) {
-	tests := []CaptionUpdate{
+	captions := []CaptionUpdate{
 		{Session: "L1", Segment: 1, Revision: 1, SourceTS: 1760000000.5, Text: "TCP uses"},
 		{Session: "L1", Segment: 1 << 40, Revision: 77, SourceTS: 1e9, Final: true, Text: `quotes " and \ and <html> & 日本`},
 		{Segment: 3, Revision: 2, SourceTS: 0.000001, Text: ""},
 	}
-	for _, c := range tests {
-		raw := c.Encode()
+	for _, caption := range captions {
+		raw := caption.Encode()
 		msg, err := DecodeSourceMessage(raw)
 		if err != nil {
 			t.Fatalf("decode %s: %v", raw, err)
 		}
-		want := c
+		want := caption
 		want.Type = TypeCaptionUpdate
 		if got := *msg.(*CaptionUpdate); got != want {
 			t.Errorf("round trip: got %+v, want %+v", got, want)
@@ -41,62 +41,65 @@ func TestEncodeRoundTrip(t *testing.T) {
 }
 
 func TestEncodeAlwaysSetsType(t *testing.T) {
-	c := CaptionUpdate{Type: "WRONG", Segment: 1, Revision: 1, SourceTS: 1, Text: "x"}
-	var out map[string]any
-	if err := json.Unmarshal(c.Encode(), &out); err != nil {
+	caption := CaptionUpdate{Type: "WRONG", Segment: 1, Revision: 1, SourceTS: 1, Text: "x"}
+	var decoded map[string]any
+	if err := json.Unmarshal(caption.Encode(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if out["type"] != TypeCaptionUpdate {
-		t.Errorf("type = %v, want %s", out["type"], TypeCaptionUpdate)
+	if decoded["type"] != TypeCaptionUpdate {
+		t.Errorf("type = %v, want %s", decoded["type"], TypeCaptionUpdate)
 	}
-	if c.Type != "WRONG" {
+	if caption.Type != "WRONG" {
 		t.Error("Encode modified its receiver")
 	}
 }
 
 func TestEncodeDoesNotEscapeHTML(t *testing.T) {
-	c := CaptionUpdate{Segment: 1, Revision: 1, SourceTS: 1, Text: "a<b>&c"}
+	caption := CaptionUpdate{Segment: 1, Revision: 1, SourceTS: 1, Text: "a<b>&c"}
 	want := `{"type":"CAPTION_UPDATE","session":"","segment":1,"revision":1,"source_ts":1,"final":false,"text":"a<b>&c"}`
-	if got := string(c.Encode()); got != want {
+	if got := string(caption.Encode()); got != want {
 		t.Errorf("Encode = %s, want %s", got, want)
 	}
 }
 
 func TestEncodeNonFiniteSourceTS(t *testing.T) {
-	for _, ts := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		c := CaptionUpdate{Segment: 1, Revision: 1, SourceTS: ts, Text: "x"}
-		if raw := c.Encode(); !json.Valid(raw) {
-			t.Errorf("SourceTS %v: invalid JSON %q", ts, raw)
+	for _, sourceTS := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		caption := CaptionUpdate{Segment: 1, Revision: 1, SourceTS: sourceTS, Text: "x"}
+		if raw := caption.Encode(); !json.Valid(raw) {
+			t.Errorf("SourceTS %v: invalid JSON %q", sourceTS, raw)
 		}
 	}
 }
 
 func TestEncodeHistory(t *testing.T) {
-	a := (&CaptionUpdate{Session: "L1", Segment: 1, Revision: 3, SourceTS: 10, Final: true, Text: "one"}).Encode()
-	b := (&CaptionUpdate{Session: "L1", Segment: 2, Revision: 1, SourceTS: 11, Final: true, Text: "two"}).Encode()
+	firstCaption := (&CaptionUpdate{Session: "L1", Segment: 1, Revision: 3, SourceTS: 10, Final: true, Text: "one"}).Encode()
+	secondCaption := (&CaptionUpdate{Session: "L1", Segment: 2, Revision: 1, SourceTS: 11, Final: true, Text: "two"}).Encode()
 
-	tests := []struct {
+	testCases := []struct {
 		name  string
 		items [][]byte
 		want  string
 	}{
 		{"nil", nil, `{"type":"HISTORY","items":[]}`},
 		{"empty", [][]byte{}, `{"type":"HISTORY","items":[]}`},
-		{"one", [][]byte{a}, `{"type":"HISTORY","items":[` + string(a) + `]}`},
-		{"two", [][]byte{a, b}, `{"type":"HISTORY","items":[` + string(a) + `,` + string(b) + `]}`},
+		{"one", [][]byte{firstCaption}, `{"type":"HISTORY","items":[` + string(firstCaption) + `]}`},
+		{"two", [][]byte{firstCaption, secondCaption}, `{"type":"HISTORY","items":[` + string(firstCaption) + `,` + string(secondCaption) + `]}`},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			raw := EncodeHistory(tt.items)
-			if string(raw) != tt.want {
-				t.Errorf("EncodeHistory = %s, want %s", raw, tt.want)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			raw := EncodeHistory(testCase.items)
+			if string(raw) != testCase.want {
+				t.Errorf("EncodeHistory = %s, want %s", raw, testCase.want)
 			}
-			var h History
-			if err := json.Unmarshal(raw, &h); err != nil {
+			if len(raw) != cap(raw) {
+				t.Errorf("EncodeHistory allocated %d bytes for %d bytes of output", cap(raw), len(raw))
+			}
+			var history History
+			if err := json.Unmarshal(raw, &history); err != nil {
 				t.Fatalf("output is not valid JSON: %v", err)
 			}
-			if h.Type != TypeHistory || h.Items == nil || len(h.Items) != len(tt.items) {
-				t.Errorf("parsed back as %+v", h)
+			if history.Type != TypeHistory || history.Items == nil || len(history.Items) != len(testCase.items) {
+				t.Errorf("parsed back as %+v", history)
 			}
 		})
 	}
@@ -104,16 +107,16 @@ func TestEncodeHistory(t *testing.T) {
 
 func TestEncodeHistoryOrderPreserved(t *testing.T) {
 	var items [][]byte
-	for seg := int64(1); seg <= 5; seg++ {
-		items = append(items, (&CaptionUpdate{Segment: seg, Revision: 1, SourceTS: float64(seg), Final: true, Text: "x"}).Encode())
+	for segment := int64(1); segment <= 5; segment++ {
+		items = append(items, (&CaptionUpdate{Segment: segment, Revision: 1, SourceTS: float64(segment), Final: true, Text: "x"}).Encode())
 	}
-	var h History
-	if err := json.Unmarshal(EncodeHistory(items), &h); err != nil {
+	var history History
+	if err := json.Unmarshal(EncodeHistory(items), &history); err != nil {
 		t.Fatal(err)
 	}
-	for i, item := range h.Items {
-		if item.Segment != int64(i+1) {
-			t.Errorf("item %d has segment %d, want %d", i, item.Segment, i+1)
+	for index, item := range history.Items {
+		if item.Segment != int64(index+1) {
+			t.Errorf("item %d has segment %d, want %d", index, item.Segment, index+1)
 		}
 	}
 }

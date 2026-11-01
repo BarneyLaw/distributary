@@ -72,18 +72,18 @@ func TestHarnessReadsEncodedCaption(t *testing.T) {
 	}
 	in := msg.(*CaptionUpdate)
 
-	var out map[string]any
-	if err := json.Unmarshal(in.Encode(), &out); err != nil {
+	var decoded map[string]any
+	if err := json.Unmarshal(in.Encode(), &decoded); err != nil {
 		t.Fatalf("Encode output is not JSON: %v", err)
 	}
-	if out["type"] != TypeCaptionUpdate || out["segment"] != 2.0 || out["revision"] != 3.0 ||
-		out["final"] != true || out["text"] != in.Text || out["source_ts"] != in.SourceTS {
-		t.Errorf("harness would read %v, want fields of %+v", out, *in)
+	if decoded["type"] != TypeCaptionUpdate || decoded["segment"] != 2.0 || decoded["revision"] != 3.0 ||
+		decoded["final"] != true || decoded["text"] != in.Text || decoded["source_ts"] != in.SourceTS {
+		t.Errorf("harness would read %v, want fields of %+v", decoded, *in)
 	}
 
-	var h struct{ Items []map[string]any }
-	if err := json.Unmarshal(EncodeHistory([][]byte{in.Encode()}), &h); err != nil || len(h.Items) != 1 || h.Items[0]["segment"] != 2.0 {
-		t.Errorf("harness would read HISTORY items %v (err %v)", h.Items, err)
+	var history struct{ Items []map[string]any }
+	if err := json.Unmarshal(EncodeHistory([][]byte{in.Encode()}), &history); err != nil || len(history.Items) != 1 || history.Items[0]["segment"] != 2.0 {
+		t.Errorf("harness would read HISTORY items %v (err %v)", history.Items, err)
 	}
 }
 
