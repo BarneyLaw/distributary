@@ -94,6 +94,7 @@ func (c *client) writePump(wg *sync.WaitGroup, ctx context.Context) {
 			if err != nil {
 				return
 			}
+			continue // More source may be pending, wait only if Pick has nothing
 		}
 
 		// All errors will cause the writer to exit.
