@@ -13,7 +13,7 @@ import (
 
 // Hub is the sole gateway for other components to interact with fanout.
 type Hub interface {
-	AddClient(*websocket.Conn, protocol.ClientHello) error
+	AddClient(*websocket.Conn, *protocol.ClientHello) error
 	Shutdown()
 }
 
@@ -54,7 +54,7 @@ func NewHub(session *session.Session) *hub {
 
 // Establishes one-connection-per-client.
 // AddClient is a blocking function. Call it using go routine
-func (h *hub) AddClient(connection *websocket.Conn, hello protocol.ClientHello) error {
+func (h *hub) AddClient(connection *websocket.Conn, hello *protocol.ClientHello) error {
 	h.mu.Lock()
 	if h.shutdown.Err() != nil {
 		h.mu.Unlock()

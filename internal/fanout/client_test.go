@@ -125,7 +125,7 @@ func newClientFixture(t *testing.T) clientFixture {
 	c := &client{
 		hub:  h,
 		conn: serverConn,
-		hello: protocol.ClientHello{
+		hello: &protocol.ClientHello{
 			Type:           protocol.TypeClientHello,
 			ClientID:       1,
 			Session:        "client-test-session",
