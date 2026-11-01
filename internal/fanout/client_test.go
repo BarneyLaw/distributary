@@ -122,7 +122,7 @@ func newClientFixture(t *testing.T) clientFixture {
 	h.pongTimeout = time.Second
 	h.controlTimeout = time.Second
 
-	c := &client{hub: h, conn: serverConn}
+	c := &client{hub: h, conn: serverConn, acked: make(chan struct{})}
 	t.Cleanup(func() {
 		c.close()
 		h.Shutdown()
@@ -350,6 +350,7 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 		ackedSeq   uint64
 		pong       []byte
 		wantAckSeq uint64
+		wantWake   bool
 	}{
 		{
 			name:       "new acknowledgement advances window",
@@ -358,6 +359,7 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 			ackedSeq:   1,
 			pong:       protocol.EncodeAck(3),
 			wantAckSeq: 3,
+			wantWake:   true,
 		},
 		{
 			name:       "duplicate acknowledgement is ignored",
@@ -366,6 +368,7 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 			ackedSeq:   3,
 			pong:       protocol.EncodeAck(3),
 			wantAckSeq: 3,
+			wantWake:   false,
 		},
 		{
 			name:       "stale acknowledgement is ignored",
@@ -374,6 +377,7 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 			ackedSeq:   3,
 			pong:       protocol.EncodeAck(2),
 			wantAckSeq: 3,
+			wantWake:   false,
 		},
 		{
 			name:       "future acknowledgement is ignored",
@@ -382,6 +386,7 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 			ackedSeq:   3,
 			pong:       protocol.EncodeAck(6),
 			wantAckSeq: 3,
+			wantWake:   false,
 		},
 		{
 			name:       "malformed acknowledgement is ignored",
@@ -390,6 +395,7 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 			ackedSeq:   3,
 			pong:       []byte("not-an-ack"),
 			wantAckSeq: 3,
+			wantWake:   false,
 		},
 	}
 
@@ -399,6 +405,7 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 			f := newClientFixture(t)
 			f.client.sentSeq = tt.sentSeq
 			f.client.ackedSeq = tt.ackedSeq
+			originalAcked := f.client.acked
 
 			ctx, cancel := context.WithCancel(context.Background())
 			var wg sync.WaitGroup
@@ -423,6 +430,26 @@ func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T)
 			f.client.mu.Unlock()
 			if gotAckSeq != tt.wantAckSeq {
 				t.Fatalf("ackedSeq = %d, want %d", gotAckSeq, tt.wantAckSeq)
+			}
+
+			select {
+			case <-originalAcked:
+				if !tt.wantWake {
+					t.Fatal("pong woke the writer without advancing ackedSeq")
+				}
+			default:
+				if tt.wantWake {
+					t.Fatal("advancing acknowledgement did not wake the writer")
+				}
+			}
+			f.client.mu.Lock()
+			currentAcked := f.client.acked
+			f.client.mu.Unlock()
+			if tt.wantWake && currentAcked == originalAcked {
+				t.Fatal("advancing acknowledgement did not install a fresh notification channel")
+			}
+			if !tt.wantWake && currentAcked != originalAcked {
+				t.Fatal("non-advancing acknowledgement replaced the notification channel")
 			}
 		})
 	}
@@ -493,6 +520,297 @@ func TestClientWritePumpPublishesCaptionAndTracksSequence(t *testing.T) {
 
 	cancel()
 	waitForWaitGroup(t, &wg)
+}
+
+func TestClientWriteSendsCaptionBelowFlowControlWindow(t *testing.T) {
+	// Implemented with Codex
+	// This test is necessary because write now owns the data-frame write and
+	// sequence accounting independently of writePump. Below the window limit it
+	// must return immediately without waiting for an acknowledgement.
+	f := newClientFixture(t)
+	peerRead := readWebsocketAsync(f.peer)
+	writerCtx, cancelWriter := context.WithCancel(context.Background())
+	keepAliveCtx, cancelKeepAlive := context.WithCancel(context.Background())
+	defer cancelWriter()
+	defer cancelKeepAlive()
+
+	wantPayload := []byte(`{"caption":"below-window"}`)
+	if err := f.client.write(wantPayload, writerCtx, keepAliveCtx); err != nil {
+		t.Fatalf("write returned an unexpected error: %v", err)
+	}
+
+	got := requireWebsocketRead(t, peerRead)
+	if got.err != nil {
+		t.Fatalf("read written caption: %v", got.err)
+	}
+	if got.messageType != websocket.TextMessage {
+		t.Fatalf("message type = %d, want %d", got.messageType, websocket.TextMessage)
+	}
+	if string(got.payload) != string(wantPayload) {
+		t.Fatalf("payload = %q, want %q", got.payload, wantPayload)
+	}
+
+	f.client.mu.Lock()
+	gotSentSeq := f.client.sentSeq
+	gotAckedSeq := f.client.ackedSeq
+	f.client.mu.Unlock()
+	if gotSentSeq != 1 {
+		t.Fatalf("sentSeq = %d, want 1", gotSentSeq)
+	}
+	if gotAckedSeq != 0 {
+		t.Fatalf("ackedSeq = %d, want 0", gotAckedSeq)
+	}
+}
+
+func TestClientWriteReturnsSocketErrorWithoutAdvancingSequence(t *testing.T) {
+	// Implemented with Codex
+	// This test is necessary because failed writes must not consume a sequence
+	// number or enter flow-control mode for a frame that never reached the peer.
+	f := newClientFixture(t)
+	f.client.close()
+
+	err := f.client.write([]byte("unwritten"), context.Background(), context.Background())
+	if err == nil {
+		t.Fatal("write succeeded on a closed connection")
+	}
+	f.client.mu.Lock()
+	gotSentSeq := f.client.sentSeq
+	f.client.mu.Unlock()
+	if gotSentSeq != 0 {
+		t.Fatalf("sentSeq = %d after failed write, want 0", gotSentSeq)
+	}
+}
+
+func TestClientWriteAtWindowLimitWaitsForReadPumpAcknowledgement(t *testing.T) {
+	// Implemented with Codex
+	// This test is necessary because write and readPump coordinate through the
+	// acked channel: the eighth outstanding frame must ping, wait, then resume
+	// only after a valid cumulative pong advances ackedSeq.
+	f := newClientFixture(t)
+	f.client.sentSeq = 7
+	originalAcked := f.client.acked
+
+	pingPayload := make(chan []byte, 1)
+	f.peer.SetPingHandler(func(payload string) error {
+		pingPayload <- []byte(payload)
+		return f.peer.WriteControl(
+			websocket.PongMessage,
+			[]byte(payload),
+			time.Now().Add(time.Second),
+		)
+	})
+	textSeen := make(chan websocketRead, 1)
+	peerReadDone := make(chan error, 1)
+	go func() {
+		for {
+			messageType, payload, err := f.peer.ReadMessage()
+			if err != nil {
+				peerReadDone <- err
+				return
+			}
+			textSeen <- websocketRead{messageType: messageType, payload: payload}
+		}
+	}()
+
+	readerCtx, cancelReader := context.WithCancel(context.Background())
+	var readerWG sync.WaitGroup
+	readerWG.Add(1)
+	go f.client.readPump(&readerWG, cancelReader)
+
+	writerCtx, cancelWriter := context.WithCancel(context.Background())
+	keepAliveCtx, cancelKeepAlive := context.WithCancel(context.Background())
+	defer cancelWriter()
+	defer cancelKeepAlive()
+	writeResult := make(chan error, 1)
+	wantPayload := []byte(`{"caption":"window-limit"}`)
+	go func() {
+		writeResult <- f.client.write(wantPayload, writerCtx, keepAliveCtx)
+	}()
+
+	select {
+	case got := <-textSeen:
+		if got.messageType != websocket.TextMessage || string(got.payload) != string(wantPayload) {
+			t.Fatalf("written frame = type %d payload %q, want text payload %q", got.messageType, got.payload, wantPayload)
+		}
+	case <-time.After(clientTestTimeout):
+		t.Fatal("peer did not receive the window-limit caption")
+	}
+	select {
+	case payload := <-pingPayload:
+		sequence, err := protocol.DecodeAck(payload)
+		if err != nil {
+			t.Fatalf("decode flow-control ping: %v", err)
+		}
+		if sequence != 8 {
+			t.Fatalf("flow-control ping sequence = %d, want 8", sequence)
+		}
+	case <-time.After(clientTestTimeout):
+		t.Fatal("peer did not receive a flow-control ping")
+	}
+	select {
+	case err := <-writeResult:
+		if err != nil {
+			t.Fatalf("write returned after acknowledgement with error: %v", err)
+		}
+	case <-time.After(clientTestTimeout):
+		t.Fatal("write did not resume after acknowledgement")
+	}
+
+	f.client.mu.Lock()
+	gotSentSeq := f.client.sentSeq
+	gotAckedSeq := f.client.ackedSeq
+	currentAcked := f.client.acked
+	f.client.mu.Unlock()
+	if gotSentSeq != 8 || gotAckedSeq != 8 {
+		t.Fatalf("sequence state = sent %d, acked %d; want sent 8, acked 8", gotSentSeq, gotAckedSeq)
+	}
+	if currentAcked == originalAcked {
+		t.Fatal("readPump did not rotate the acknowledgement notification channel")
+	}
+
+	if err := f.peer.WriteControl(websocket.CloseMessage, nil, time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("close peer connection: %v", err)
+	}
+	waitForWaitGroup(t, &readerWG)
+	if err := readerCtx.Err(); err != context.Canceled {
+		t.Fatalf("reader context error = %v, want %v", err, context.Canceled)
+	}
+	select {
+	case <-peerReadDone:
+	case <-time.After(clientTestTimeout):
+		t.Fatal("peer reader did not stop after the client connection closed")
+	}
+}
+
+func TestClientStartPingingModeStopsOnEachLifecycleSignal(t *testing.T) {
+	// Implemented with Codex
+	tests := []struct {
+		name   string
+		why    string
+		signal string
+	}{
+		{
+			name:   "acknowledgement",
+			why:    "an advancing ACK must release a writer blocked by the flow-control window",
+			signal: "ack",
+		},
+		{
+			name:   "reader cancellation",
+			why:    "a stopped reader makes further acknowledgement waiting pointless",
+			signal: "writer",
+		},
+		{
+			name:   "keepalive cancellation",
+			why:    "a failed keepalive means the connection must not remain in pinging mode",
+			signal: "keepalive",
+		},
+		{
+			name:   "hub shutdown",
+			why:    "global shutdown must release a writer blocked in flow control",
+			signal: "hub",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("necessity: %s", tt.why)
+			f := newClientFixture(t)
+			acked := make(chan struct{})
+			writerCtx, cancelWriter := context.WithCancel(context.Background())
+			keepAliveCtx, cancelKeepAlive := context.WithCancel(context.Background())
+			defer cancelWriter()
+			defer cancelKeepAlive()
+
+			pingPayload := make(chan []byte, 1)
+			f.peer.SetPingHandler(func(payload string) error {
+				pingPayload <- []byte(payload)
+				return nil
+			})
+			peerRead := readWebsocketAsync(f.peer)
+			result := make(chan error, 1)
+			go func() {
+				result <- f.client.startPingingMode(17, writerCtx, keepAliveCtx, acked)
+			}()
+
+			select {
+			case payload := <-pingPayload:
+				sequence, err := protocol.DecodeAck(payload)
+				if err != nil {
+					t.Fatalf("decode pinging-mode payload: %v", err)
+				}
+				if sequence != 17 {
+					t.Fatalf("pinging-mode sequence = %d, want 17", sequence)
+				}
+			case <-time.After(clientTestTimeout):
+				t.Fatal("pinging mode did not send its initial ping")
+			}
+
+			switch tt.signal {
+			case "ack":
+				close(acked)
+			case "writer":
+				cancelWriter()
+			case "keepalive":
+				cancelKeepAlive()
+			case "hub":
+				f.hub.shutdownFunc()
+			default:
+				t.Fatalf("unknown lifecycle signal %q", tt.signal)
+			}
+
+			select {
+			case err := <-result:
+				if err != nil {
+					t.Fatalf("startPingingMode returned an unexpected error: %v", err)
+				}
+			case <-time.After(clientTestTimeout):
+				t.Fatal("startPingingMode did not stop after lifecycle signal")
+			}
+
+			f.client.close()
+			_ = requireWebsocketRead(t, peerRead)
+		})
+	}
+}
+
+func TestClientStartPingingModeRejectsDeadClient(t *testing.T) {
+	// Implemented with Codex
+	// This test is necessary because a client that never advances its ACK must
+	// eventually release the blocked writer with an explicit dead-client error.
+	f := newClientFixture(t)
+	f.hub.pingInterval = 20 * time.Millisecond
+	peerRead := readWebsocketAsync(f.peer)
+
+	err := f.client.startPingingMode(
+		8,
+		context.Background(),
+		context.Background(),
+		make(chan struct{}),
+	)
+	if err == nil || err.Error() != "Client is dead" {
+		t.Fatalf("startPingingMode error = %v, want %q", err, "Client is dead")
+	}
+
+	f.client.close()
+	_ = requireWebsocketRead(t, peerRead)
+}
+
+func TestClientStartPingingModeReturnsPingFailure(t *testing.T) {
+	// Implemented with Codex
+	// This test is necessary because flow-control recovery cannot proceed when
+	// its control ping cannot be written; the socket error must reach writePump.
+	f := newClientFixture(t)
+	f.client.close()
+
+	err := f.client.startPingingMode(
+		8,
+		context.Background(),
+		context.Background(),
+		make(chan struct{}),
+	)
+	if err == nil {
+		t.Fatal("startPingingMode succeeded when its ping could not be written")
+	}
 }
 
 func TestClientWritePumpStopsOnEachLifecycleSignal(t *testing.T) {
