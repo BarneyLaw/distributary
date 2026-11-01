@@ -6,18 +6,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BarneyLaw/distributary/internal/protocol"
+	"github.com/BarneyLaw/distributary/internal/session"
 	"github.com/gorilla/websocket"
 )
 
 // Hub is the sole gateway for other components to interact with fanout.
 type Hub interface {
-	AddClient(*websocket.Conn) error
+	AddClient(*websocket.Conn, *protocol.ClientHello) error
 	Shutdown()
 }
 
 // Keep hub unexported to prevent instantiation outside NewHub().
 type hub struct {
-	sess *Session
+	sess *session.Session
 
 	clients *sync.WaitGroup
 
@@ -36,7 +38,7 @@ type hub struct {
 // Instantiates a Hub that will orchestrate all clients connection.
 // A nil session will be accepted and cause error later on.
 // Do not pass a nil session.
-func NewHub(session *Session) *hub {
+func NewHub(session *session.Session) *hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hub{
 		sess:           session,
@@ -52,7 +54,7 @@ func NewHub(session *Session) *hub {
 
 // Establishes one-connection-per-client.
 // AddClient is a blocking function. Call it using go routine
-func (h *hub) AddClient(connection *websocket.Conn) error {
+func (h *hub) AddClient(connection *websocket.Conn, hello protocol.ClientHello) error {
 	h.mu.Lock()
 	if h.shutdown.Err() != nil {
 		h.mu.Unlock()
@@ -64,6 +66,7 @@ func (h *hub) AddClient(connection *websocket.Conn) error {
 	c := &client{
 		hub:      h,
 		conn:     connection,
+		hello:    hello,
 		sentSeq:  0,
 		ackedSeq: 0,
 		acked:    make(chan struct{}),
@@ -86,10 +89,6 @@ func (h *hub) AddClient(connection *websocket.Conn) error {
 	wg.Wait()
 	h.clients.Done()
 	return nil
-}
-
-func (h *hub) getSnapshot() Snapshot {
-	return h.sess.GetSnapshot()
 }
 
 func (h *hub) helperShutdown() {

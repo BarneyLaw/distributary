@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/BarneyLaw/distributary/internal/protocol"
+	"github.com/BarneyLaw/distributary/internal/session"
 	"github.com/gorilla/websocket"
 )
 
@@ -65,10 +66,25 @@ func websocketPair(t *testing.T) (serverConn, clientConn *websocket.Conn) {
 }
 
 // Implemented with Codex
-func addClientAsync(h *hub, conn *websocket.Conn) <-chan error {
+func newTestSession() *session.Session {
+	return session.New(session.Config{})
+}
+
+// Implemented with Codex
+func newTestClientHello() protocol.ClientHello {
+	return protocol.ClientHello{
+		Type:           protocol.TypeClientHello,
+		ClientID:       1,
+		Session:        "test-session",
+		HistorySeconds: 30,
+	}
+}
+
+// Implemented with Codex
+func addClientAsync(h *hub, conn *websocket.Conn, hello protocol.ClientHello) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		done <- h.AddClient(conn)
+		done <- h.AddClient(conn, hello)
 	}()
 	return done
 }
@@ -89,11 +105,11 @@ func TestNewHubInitializesUsableDefaults(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because zero or missing timing, size, context, or
 	// synchronization fields would make a freshly-created hub unsafe to use.
-	session := CreateSession()
-	h := NewHub(session)
+	sess := newTestSession()
+	h := NewHub(sess)
 	t.Cleanup(h.Shutdown)
 
-	if h.sess != session {
+	if h.sess != sess {
 		t.Fatal("NewHub did not retain the supplied session")
 	}
 	if h.clients == nil {
@@ -119,39 +135,14 @@ func TestNewHubInitializesUsableDefaults(t *testing.T) {
 	}
 }
 
-// Implemented with Codex
-func TestGetSnapshotReturnsSessionSnapshot(t *testing.T) {
-	// This test is necessary because clients rely on the hub to preserve both
-	// parts of a session snapshot: the current caption and its notification.
-	notification := make(chan struct{})
-	caption := &protocol.SourceHello{
-		Type:    protocol.TypeSourceHello,
-		Session: "snapshot-test",
-	}
-	session := &Session{
-		caption:      caption,
-		notification: notification,
-	}
-	h := NewHub(session)
-	t.Cleanup(h.Shutdown)
-
-	got := h.getSnapshot()
-	if got.caption != caption {
-		t.Fatalf("snapshot caption = %p, want %p", got.caption, caption)
-	}
-	if got.notification != notification {
-		t.Fatal("snapshot notification channel differs from the session channel")
-	}
-}
-
 func TestAddClientRejectsClientAfterShutdown(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary to enforce the lifecycle boundary and, by passing
 	// nil, prove rejection happens before the connection is accessed.
-	h := NewHub(CreateSession())
+	h := NewHub(newTestSession())
 	h.Shutdown()
 
-	err := h.AddClient(nil)
+	err := h.AddClient(nil, newTestClientHello())
 	if err == nil {
 		t.Fatal("AddClient succeeded after Shutdown")
 	}
@@ -165,13 +156,13 @@ func TestAddClientAppliesReadLimit(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because an unapplied read limit lets one client
 	// force unbounded message allocation. Exceeding it must end that client.
-	h := NewHub(CreateSession())
+	h := NewHub(newTestSession())
 	h.maxMessageSize = 4
 	h.pingInterval = time.Hour
 	t.Cleanup(h.Shutdown)
 
 	serverConn, clientConn := websocketPair(t)
-	addResult := addClientAsync(h, serverConn)
+	addResult := addClientAsync(h, serverConn, newTestClientHello())
 
 	if err := clientConn.WriteMessage(websocket.TextMessage, []byte("12345")); err != nil {
 		t.Fatalf("write oversized message testcase error: %v", err)
@@ -185,12 +176,12 @@ func TestAddClientReturnsWhenPeerDisconnects(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because AddClient owns two goroutines and must not
 	// leak either one after the remote peer goes away.
-	h := NewHub(CreateSession())
+	h := NewHub(newTestSession())
 	h.pingInterval = time.Hour
 	t.Cleanup(h.Shutdown)
 
 	serverConn, clientConn := websocketPair(t)
-	addResult := addClientAsync(h, serverConn)
+	addResult := addClientAsync(h, serverConn, newTestClientHello())
 
 	if err := clientConn.Close(); err != nil {
 		t.Fatalf("close peer connection: %v", err)
@@ -204,13 +195,13 @@ func TestShutdownTerminatesActiveClient(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because shutdown must cancel the writer, close the
 	// socket, unblock the reader, and wait for the complete client lifecycle.
-	h := NewHub(CreateSession())
+	h := NewHub(newTestSession())
 	h.pingInterval = 10 * time.Millisecond
 	h.pongTimeout = time.Second
 	h.controlTimeout = time.Second
 
 	serverConn, clientConn := websocketPair(t)
-	addResult := addClientAsync(h, serverConn)
+	addResult := addClientAsync(h, serverConn, newTestClientHello())
 
 	// Receiving a ping proves AddClient has registered the client and started
 	// its workers before Shutdown is invoked, avoiding a scheduler-dependent
@@ -229,8 +220,12 @@ func TestShutdownTerminatesActiveClient(t *testing.T) {
 	})
 	peerReadDone := make(chan error, 1)
 	go func() {
-		_, _, err := clientConn.ReadMessage()
-		peerReadDone <- err
+		for {
+			if _, _, err := clientConn.ReadMessage(); err != nil {
+				peerReadDone <- err
+				return
+			}
+		}
 	}()
 
 	select {
@@ -267,7 +262,7 @@ func TestShutdownWaitsForRegisteredClients(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because Shutdown returning while clients are still
 	// active would let callers tear down dependencies those clients still use.
-	h := NewHub(CreateSession())
+	h := NewHub(newTestSession())
 	h.clients.Add(1)
 
 	shutdownDone := make(chan struct{})

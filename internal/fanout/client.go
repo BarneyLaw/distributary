@@ -2,7 +2,6 @@ package fanout
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 type client struct {
 	hub      *hub
 	conn     *websocket.Conn
+	hello    protocol.ClientHello
 	sentSeq  uint64
 	ackedSeq uint64
 
@@ -75,33 +75,37 @@ func (c *client) writePump(wg *sync.WaitGroup, ctx context.Context) {
 		wg.Done()
 	}()
 
-	snapshot := c.hub.getSnapshot()
+	history, cursor := c.hub.sess.Join(&c.hello)
+
+	if errHistory := c.write(history, ctx, keepAliveCtx); errHistory != nil {
+		return
+	}
 
 	for {
+		frames, wake, behind := c.hub.sess.Pick(&cursor, 1, true)
+
+		if behind {
+			return
+		}
+
+		if len(frames) != 0 {
+			err := c.write(frames[0], ctx, keepAliveCtx)
+
+			if err != nil {
+				return
+			}
+		}
+
 		// All errors will cause the writer to exit.
 		select {
-		case <-snapshot.notification:
-			// Do nothing, proceed
+		case <-wake:
+		// Do nothing, proceed
 		case <-ctx.Done():
 			return // Reader exit, writer must exit too
 		case <-keepAliveCtx.Done():
 			return // Keep alive ping fails, writer must exit
 		case <-c.hub.shutdown.Done():
 			return // Hub shutdown, all clients shall terminate
-		}
-
-		snapshot = c.hub.getSnapshot()
-
-		caption, error := json.Marshal(snapshot.caption)
-
-		if error != nil {
-			return
-		}
-
-		err := c.write(caption, ctx, keepAliveCtx)
-
-		if err != nil {
-			return
 		}
 
 	}
