@@ -13,7 +13,7 @@ import (
 
 // Hub is the sole gateway for other components to interact with fanout.
 type Hub interface {
-	AddClient(*websocket.Conn, *protocol.ClientHello) error
+	AddClient(*websocket.Conn, protocol.ClientHello) error
 	Shutdown()
 }
 
