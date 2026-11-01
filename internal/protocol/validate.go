@@ -8,28 +8,28 @@ const MaxHistorySeconds = 60
 
 // validateCaptionUpdate checks the value ranges of a decoded caption.
 // Semantic checks (already final, stale revision, too old) belong to session.
-func validateCaptionUpdate(c *CaptionUpdate) error {
-	if c.Segment < 1 {
-		return fmt.Errorf("%w: segment must be >= 1, got %d", ErrOutOfRange, c.Segment)
+func validateCaptionUpdate(caption *CaptionUpdate) error {
+	if caption.Segment < 1 {
+		return fmt.Errorf("%w: segment must be >= 1, got %d", ErrOutOfRange, caption.Segment)
 	}
-	if c.Revision < 1 {
-		return fmt.Errorf("%w: revision must be >= 1, got %d", ErrOutOfRange, c.Revision)
+	if caption.Revision < 1 {
+		return fmt.Errorf("%w: revision must be >= 1, got %d", ErrOutOfRange, caption.Revision)
 	}
-	if c.SourceTS <= 0 {
-		return fmt.Errorf("%w: source_ts must be > 0, got %v", ErrOutOfRange, c.SourceTS)
+	if caption.SourceTS <= 0 {
+		return fmt.Errorf("%w: source_ts must be > 0, got %v", ErrOutOfRange, caption.SourceTS)
 	}
 	return nil
 }
 
 // validateClientHello rejects negative resume fields and clamps
 // HistorySeconds to [0, MaxHistorySeconds] in place.
-func validateClientHello(h *ClientHello) error {
-	if h.LastSegment < 0 {
-		return fmt.Errorf("%w: last_segment must be >= 0, got %d", ErrOutOfRange, h.LastSegment)
+func validateClientHello(hello *ClientHello) error {
+	if hello.LastSegment < 0 {
+		return fmt.Errorf("%w: last_segment must be >= 0, got %d", ErrOutOfRange, hello.LastSegment)
 	}
-	if h.LastRevision < 0 {
-		return fmt.Errorf("%w: last_revision must be >= 0, got %d", ErrOutOfRange, h.LastRevision)
+	if hello.LastRevision < 0 {
+		return fmt.Errorf("%w: last_revision must be >= 0, got %d", ErrOutOfRange, hello.LastRevision)
 	}
-	h.HistorySeconds = min(max(h.HistorySeconds, 0), MaxHistorySeconds)
+	hello.HistorySeconds = min(max(hello.HistorySeconds, 0), MaxHistorySeconds)
 	return nil
 }

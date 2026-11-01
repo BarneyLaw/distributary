@@ -32,7 +32,7 @@ func TestDecodeSourceMessageCaption(t *testing.T) {
 }
 
 func TestDecodeSourceMessageCaptionAccepts(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name string
 		raw  string
 		want CaptionUpdate
@@ -68,21 +68,21 @@ func TestDecodeSourceMessageCaptionAccepts(t *testing.T) {
 			want: CaptionUpdate{Type: TypeCaptionUpdate, Segment: 1, Revision: 1, SourceTS: 1, Text: `café "<b>" 日本`},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg, err := DecodeSourceMessage([]byte(tt.raw))
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			msg, err := DecodeSourceMessage([]byte(testCase.raw))
 			if err != nil {
 				t.Fatalf("DecodeSourceMessage: %v", err)
 			}
-			if got := *msg.(*CaptionUpdate); got != tt.want {
-				t.Errorf("got %+v, want %+v", got, tt.want)
+			if got := *msg.(*CaptionUpdate); got != testCase.want {
+				t.Errorf("got %+v, want %+v", got, testCase.want)
 			}
 		})
 	}
 }
 
 func TestDecodeSourceMessageCaptionRejects(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name string
 		raw  string
 		want error
@@ -123,15 +123,17 @@ func TestDecodeSourceMessageCaptionRejects(t *testing.T) {
 		{"source_ts bool", `{"type":"CAPTION_UPDATE","segment":1,"revision":1,"source_ts":true,"final":true,"text":"x"}`, ErrBadType},
 		{"segment overflow", `{"type":"CAPTION_UPDATE","segment":99999999999999999999,"revision":1,"source_ts":1,"final":true,"text":"x"}`, ErrOutOfRange},
 		{"segment huge exponent", `{"type":"CAPTION_UPDATE","segment":1e300,"revision":1,"source_ts":1,"final":true,"text":"x"}`, ErrOutOfRange},
+		{"segment huge negative exponent", `{"type":"CAPTION_UPDATE","segment":-1e300,"revision":1,"source_ts":1,"final":true,"text":"x"}`, ErrOutOfRange},
+		{"segment exponent overflows float", `{"type":"CAPTION_UPDATE","segment":1e400,"revision":1,"source_ts":1,"final":true,"text":"x"}`, ErrOutOfRange},
 		{"source_ts zero", `{"type":"CAPTION_UPDATE","segment":1,"revision":1,"source_ts":0,"final":true,"text":"x"}`, ErrOutOfRange},
 		{"source_ts negative", `{"type":"CAPTION_UPDATE","segment":1,"revision":1,"source_ts":-1,"final":true,"text":"x"}`, ErrOutOfRange},
 		{"source_ts overflow", `{"type":"CAPTION_UPDATE","segment":1,"revision":1,"source_ts":1e999,"final":true,"text":"x"}`, ErrOutOfRange},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg, err := DecodeSourceMessage([]byte(tt.raw))
-			if !errors.Is(err, tt.want) {
-				t.Fatalf("err = %v, want %v", err, tt.want)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			msg, err := DecodeSourceMessage([]byte(testCase.raw))
+			if !errors.Is(err, testCase.want) {
+				t.Fatalf("err = %v, want %v", err, testCase.want)
 			}
 			if msg != nil {
 				t.Errorf("msg = %v, want nil on error", msg)
@@ -141,7 +143,7 @@ func TestDecodeSourceMessageCaptionRejects(t *testing.T) {
 }
 
 func TestDecodeSourceMessageSourceDone(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name string
 		raw  string
 		want SourceDone
@@ -167,21 +169,21 @@ func TestDecodeSourceMessageSourceDone(t *testing.T) {
 			want: SourceDone{Type: TypeSourceDone},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg, err := DecodeSourceMessage([]byte(tt.raw))
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			msg, err := DecodeSourceMessage([]byte(testCase.raw))
 			if err != nil {
 				t.Fatalf("DecodeSourceMessage: %v", err)
 			}
-			if got := *msg.(*SourceDone); got != tt.want {
-				t.Errorf("got %+v, want %+v", got, tt.want)
+			if got := *msg.(*SourceDone); got != testCase.want {
+				t.Errorf("got %+v, want %+v", got, testCase.want)
 			}
 		})
 	}
 }
 
 func TestDecodeHello(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name string
 		raw  string
 		want any
@@ -222,30 +224,30 @@ func TestDecodeHello(t *testing.T) {
 			want: ClientHello{Type: TypeClientHello, HistorySeconds: 15.5},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg, err := DecodeHello([]byte(tt.raw))
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			msg, err := DecodeHello([]byte(testCase.raw))
 			if err != nil {
 				t.Fatalf("DecodeHello: %v", err)
 			}
 			var got any
-			switch m := msg.(type) {
+			switch decoded := msg.(type) {
 			case *SourceHello:
-				got = *m
+				got = *decoded
 			case *ClientHello:
-				got = *m
+				got = *decoded
 			default:
 				t.Fatalf("got %T", msg)
 			}
-			if got != tt.want {
-				t.Errorf("got %+v, want %+v", got, tt.want)
+			if got != testCase.want {
+				t.Errorf("got %+v, want %+v", got, testCase.want)
 			}
 		})
 	}
 }
 
 func TestDecodeHelloClampsHistorySeconds(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		raw  string
 		want float64
 	}{
@@ -257,21 +259,21 @@ func TestDecodeHelloClampsHistorySeconds(t *testing.T) {
 		{`999`, 60},
 		{`1e300`, 60},
 	}
-	for _, tt := range tests {
-		t.Run(tt.raw, func(t *testing.T) {
-			msg, err := DecodeHello([]byte(`{"type":"CLIENT_HELLO","history_seconds":` + tt.raw + `}`))
+	for _, testCase := range testCases {
+		t.Run(testCase.raw, func(t *testing.T) {
+			msg, err := DecodeHello([]byte(`{"type":"CLIENT_HELLO","history_seconds":` + testCase.raw + `}`))
 			if err != nil {
 				t.Fatalf("DecodeHello: %v", err)
 			}
-			if got := msg.(*ClientHello).HistorySeconds; got != tt.want {
-				t.Errorf("HistorySeconds = %v, want %v", got, tt.want)
+			if got := msg.(*ClientHello).HistorySeconds; got != testCase.want {
+				t.Errorf("HistorySeconds = %v, want %v", got, testCase.want)
 			}
 		})
 	}
 }
 
 func TestDecodeHelloRejects(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name string
 		raw  string
 		want error
@@ -290,11 +292,11 @@ func TestDecodeHelloRejects(t *testing.T) {
 		{"last_revision negative", `{"type":"CLIENT_HELLO","last_revision":-1}`, ErrOutOfRange},
 		{"history_seconds overflow", `{"type":"CLIENT_HELLO","history_seconds":1e999}`, ErrOutOfRange},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg, err := DecodeHello([]byte(tt.raw))
-			if !errors.Is(err, tt.want) {
-				t.Fatalf("err = %v, want %v", err, tt.want)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			msg, err := DecodeHello([]byte(testCase.raw))
+			if !errors.Is(err, testCase.want) {
+				t.Fatalf("err = %v, want %v", err, testCase.want)
 			}
 			if msg != nil {
 				t.Errorf("msg = %v, want nil on error", msg)

@@ -7,14 +7,14 @@ import (
 )
 
 func TestAckRoundTrip(t *testing.T) {
-	for _, seq := range []uint64{0, 1, 255, 1 << 32, math.MaxUint64} {
-		payload := EncodeAck(seq)
-		if len(payload) != AckSize {
-			t.Fatalf("EncodeAck(%d) is %d bytes, want %d", seq, len(payload), AckSize)
+	for _, sentCount := range []uint64{0, 1, 255, 1 << 32, math.MaxUint64} {
+		pongPayload := EncodeAck(sentCount)
+		if len(pongPayload) != AckSize {
+			t.Fatalf("EncodeAck(%d) is %d bytes, want %d", sentCount, len(pongPayload), AckSize)
 		}
-		got, err := DecodeAck(payload)
-		if err != nil || got != seq {
-			t.Errorf("DecodeAck(EncodeAck(%d)) = %d, %v", seq, got, err)
+		got, err := DecodeAck(pongPayload)
+		if err != nil || got != sentCount {
+			t.Errorf("DecodeAck(EncodeAck(%d)) = %d, %v", sentCount, got, err)
 		}
 	}
 }
@@ -27,9 +27,9 @@ func TestAckBigEndian(t *testing.T) {
 }
 
 func TestDecodeAckRejectsWrongLength(t *testing.T) {
-	for _, payload := range [][]byte{nil, {}, {1, 2, 3}, make([]byte, 9), []byte("keepalive")} {
-		if _, err := DecodeAck(payload); !errors.Is(err, ErrMalformed) {
-			t.Errorf("DecodeAck(%q) err = %v, want ErrMalformed", payload, err)
+	for _, pongPayload := range [][]byte{nil, {}, {1, 2, 3}, make([]byte, 9), []byte("keepalive")} {
+		if _, err := DecodeAck(pongPayload); !errors.Is(err, ErrMalformed) {
+			t.Errorf("DecodeAck(%q) err = %v, want ErrMalformed", pongPayload, err)
 		}
 	}
 }

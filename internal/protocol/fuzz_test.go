@@ -26,21 +26,21 @@ var sentinelErrors = []error{ErrMalformed, ErrUnknownType, ErrMissingField, ErrB
 // typed errors, and every accepted message satisfies its documented
 // guarantees.
 func FuzzDecode(f *testing.F) {
-	for _, s := range fuzzSeeds {
-		f.Add([]byte(s))
+	for _, seed := range fuzzSeeds {
+		f.Add([]byte(seed))
 	}
 	f.Fuzz(func(t *testing.T, raw []byte) {
 		msg, err := DecodeSourceMessage(raw)
 		checkResult(t, msg, err)
-		if c, ok := msg.(*CaptionUpdate); ok {
-			checkCaption(t, c)
+		if caption, isCaption := msg.(*CaptionUpdate); isCaption {
+			checkCaption(t, caption)
 		}
 
 		msg, err = DecodeHello(raw)
 		checkResult(t, msg, err)
-		if h, ok := msg.(*ClientHello); ok {
-			if h.LastSegment < 0 || h.LastRevision < 0 || h.HistorySeconds < 0 || h.HistorySeconds > MaxHistorySeconds {
-				t.Errorf("ClientHello guarantees broken: %+v", *h)
+		if hello, isHello := msg.(*ClientHello); isHello {
+			if hello.LastSegment < 0 || hello.LastRevision < 0 || hello.HistorySeconds < 0 || hello.HistorySeconds > MaxHistorySeconds {
+				t.Errorf("ClientHello guarantees broken: %+v", *hello)
 			}
 		}
 	})
@@ -54,8 +54,8 @@ func checkResult(t *testing.T, msg any, err error) {
 	if err == nil {
 		return
 	}
-	for _, s := range sentinelErrors {
-		if errors.Is(err, s) {
+	for _, sentinel := range sentinelErrors {
+		if errors.Is(err, sentinel) {
 			return
 		}
 	}
@@ -64,21 +64,21 @@ func checkResult(t *testing.T, msg any, err error) {
 
 // checkCaption verifies the decode guarantees and that the caption survives
 // an encode/decode round trip unchanged.
-func checkCaption(t *testing.T, c *CaptionUpdate) {
+func checkCaption(t *testing.T, caption *CaptionUpdate) {
 	t.Helper()
-	if c.Segment < 1 || c.Revision < 1 || !(c.SourceTS > 0) {
-		t.Fatalf("CaptionUpdate guarantees broken: %+v", *c)
+	if caption.Segment < 1 || caption.Revision < 1 || !(caption.SourceTS > 0) {
+		t.Fatalf("CaptionUpdate guarantees broken: %+v", *caption)
 	}
-	raw := c.Encode()
+	raw := caption.Encode()
 	if !json.Valid(raw) {
 		t.Fatalf("Encode produced invalid JSON: %q", raw)
 	}
-	again, err := DecodeSourceMessage(raw)
+	redecoded, err := DecodeSourceMessage(raw)
 	if err != nil {
 		t.Fatalf("re-decode of %q: %v", raw, err)
 	}
-	if *again.(*CaptionUpdate) != *c {
-		t.Errorf("round trip changed caption: %+v -> %+v", *c, *again.(*CaptionUpdate))
+	if *redecoded.(*CaptionUpdate) != *caption {
+		t.Errorf("round trip changed caption: %+v -> %+v", *caption, *redecoded.(*CaptionUpdate))
 	}
 	if !json.Valid(EncodeHistory([][]byte{raw, raw})) {
 		t.Error("EncodeHistory produced invalid JSON")
