@@ -10,6 +10,9 @@ harness/*.json
  
 # Raw experiment CSVs are large; commit the JSON summaries only
 experiments/results/*.csv
+experiments/results/runs/*/*.csv
+# ...but keep the performance log written by experiments/run/perf.py
+!experiments/results/perf_log.csv
  
 # Scratch copy used by `make py-baseline`
 .baseline/
