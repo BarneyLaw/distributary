@@ -36,6 +36,7 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -102,6 +103,32 @@ def port_free(port: int) -> bool:
 
 def lo_qdisc() -> str:
     return sh("tc", "qdisc", "show", "dev", "lo")
+
+
+def verify_mode(mode: str):
+    """Start the server the way run_demo.py will (solution_server.py with
+    DISTRIBUTARY_MODE) and check its first log line names the mode we are
+    about to record. A main.go that ignores DISTRIBUTARY_MODE would otherwise
+    silently run naive while the log says live."""
+    if mode == "starter":
+        return
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    proc = subprocess.Popen([sys.executable, "solution_server.py", "--port", str(port)], cwd=ROOT,
+                            env=dict(os.environ, DISTRIBUTARY_MODE=mode),
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    time.sleep(1.0)
+    proc.terminate()
+    try:
+        out = proc.communicate(timeout=5)[0]
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        out = proc.communicate()[0]
+    if f"distributary ({mode})" not in out:
+        first = next((ln for ln in out.splitlines() if ln.strip()), "<no output>")
+        raise SystemExit(f"asked for --mode {mode}, but the server started as:\n  {first}\n"
+                         f"cmd/distributary/main.go must read DISTRIBUTARY_MODE and support '{mode}'.")
 
 
 def nested(d: dict, path: str):
@@ -243,6 +270,7 @@ def main():
 
     if not args.no_build and args.mode != "starter":
         subprocess.run(["make", "build"], cwd=ROOT, check=True)
+    verify_mode(args.mode)
 
     info = git_info()
     info.update({"host": platform.node(), "cpus": os.cpu_count(), "kernel": platform.release()})
