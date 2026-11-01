@@ -34,6 +34,8 @@ type hub struct {
 }
 
 // Instantiates a Hub that will orchestrate all clients connection.
+// A nil session will be accepted and cause error later on.
+// Do not pass a nil session.
 func NewHub(session *Session) *hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hub{
@@ -49,6 +51,7 @@ func NewHub(session *Session) *hub {
 }
 
 // Establishes one-connection-per-client.
+// AddClient is a blocking function. Call it using go routine
 func (h *hub) AddClient(connection *websocket.Conn) error {
 	h.mu.Lock()
 	if h.shutdown.Err() != nil {
@@ -63,14 +66,12 @@ func (h *hub) AddClient(connection *websocket.Conn) error {
 		conn:     connection,
 		sentSeq:  0,
 		ackedSeq: 0,
+		acked:    make(chan struct{}),
 	}
 
 	// Spawn threads for client
 	h.clients.Add(1)
 	h.mu.Unlock()
-
-	stop := c.keepalive()
-	defer stop()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
