@@ -2,7 +2,6 @@ package fanout
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BarneyLaw/distributary/internal/protocol"
+	"github.com/BarneyLaw/distributary/internal/session"
 	"github.com/gorilla/websocket"
 )
 
@@ -117,12 +117,22 @@ func newClientFixture(t *testing.T) clientFixture {
 	t.Helper()
 
 	serverConn, peerConn, transportCloseCalls := clientWebsocketPair(t)
-	h := NewHub(CreateSession())
+	h := NewHub(session.New(session.Config{}))
 	h.pingInterval = time.Hour
 	h.pongTimeout = time.Second
 	h.controlTimeout = time.Second
 
-	c := &client{hub: h, conn: serverConn, acked: make(chan struct{})}
+	c := &client{
+		hub:  h,
+		conn: serverConn,
+		hello: protocol.ClientHello{
+			Type:           protocol.TypeClientHello,
+			ClientID:       1,
+			Session:        "client-test-session",
+			HistorySeconds: 30,
+		},
+		acked: make(chan struct{}),
+	}
 	t.Cleanup(func() {
 		c.close()
 		h.Shutdown()
@@ -154,16 +164,6 @@ func waitForWaitGroup(t *testing.T, wg *sync.WaitGroup) {
 }
 
 // Implemented with Codex
-// waitForWritePumpStart gives writePump time to take its initial snapshot and
-// block on that snapshot's notification channel. There is no externally
-// observable ready signal in the production API; keeping this synchronization
-// in one helper makes that limitation explicit and avoids racing publication
-// against the initial getSnapshot call.
-func waitForWritePumpStart() {
-	time.Sleep(10 * time.Millisecond)
-}
-
-// Implemented with Codex
 func requireSentSequence(t *testing.T, c *client, want uint64) {
 	t.Helper()
 
@@ -183,12 +183,16 @@ func requireSentSequence(t *testing.T, c *client, want uint64) {
 }
 
 // Implemented with Codex
-func publishTestCaption(s *Session, caption *protocol.SourceHello) {
-	s.mu.Lock()
-	s.caption = caption
-	close(s.notification)
-	s.notification = make(chan struct{})
-	s.mu.Unlock()
+func clientTestCaption(segment, revision int64, final bool) *protocol.CaptionUpdate {
+	return &protocol.CaptionUpdate{
+		Type:     protocol.TypeCaptionUpdate,
+		Session:  "client-test-session",
+		Segment:  segment,
+		Revision: revision,
+		SourceTS: 100 + float64(segment),
+		Final:    final,
+		Text:     "caption",
+	}
 }
 
 // Implemented with Codex
@@ -479,44 +483,59 @@ func TestClientReadPumpTimesOutSilentPeer(t *testing.T) {
 	}
 }
 
-func TestClientWritePumpPublishesCaptionAndTracksSequence(t *testing.T) {
+func TestClientWritePumpSendsHistoryThenLiveCaption(t *testing.T) {
 	// Implemented with Codex
-	// This test is necessary because the writer's primary contract is to wait
-	// for notification, serialize the latest snapshot as a text frame, and count
-	// exactly one sent sequence for that frame.
+	// This test is necessary because the writer must pass its ClientHello to
+	// Session.Join, send the resulting HISTORY first, then use the returned
+	// cursor to send later Session.Pick frames without a gap or duplicate.
 	f := newClientFixture(t)
+	f.client.hello.LastSegment = 1
+	f.client.hello.HistorySeconds = 60
+	alreadyHeld := clientTestCaption(1, 1, true)
+	historical := clientTestCaption(2, 1, true)
+	for _, caption := range []*protocol.CaptionUpdate{alreadyHeld, historical} {
+		if verdict := f.hub.sess.Apply(caption); verdict != session.Accepted {
+			t.Fatalf("apply historical caption: got %v, want %v", verdict, session.Accepted)
+		}
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go f.client.writePump(&wg, ctx)
-	waitForWritePumpStart()
 
-	wantCaption := &protocol.SourceHello{
-		Type:    protocol.TypeSourceHello,
-		Session: "client-write-test",
+	historyFrame := requireWebsocketRead(t, readWebsocketAsync(f.peer))
+	if historyFrame.err != nil {
+		t.Fatalf("read HISTORY frame: %v", historyFrame.err)
 	}
-	peerRead := readWebsocketAsync(f.peer)
-	publishTestCaption(f.hub.sess, wantCaption)
+	if historyFrame.messageType != websocket.TextMessage {
+		t.Fatalf("HISTORY frame type = %d, want %d", historyFrame.messageType, websocket.TextMessage)
+	}
+	wantHistory := protocol.EncodeHistory([][]byte{historical.Encode()})
+	if string(historyFrame.payload) != string(wantHistory) {
+		t.Fatalf("HISTORY payload = %s, want %s", historyFrame.payload, wantHistory)
+	}
 
-	got := requireWebsocketRead(t, peerRead)
-	if got.err != nil {
-		t.Fatalf("read caption frame: %v", got.err)
+	live := clientTestCaption(3, 1, false)
+	liveRead := readWebsocketAsync(f.peer)
+	if verdict := f.hub.sess.Apply(live); verdict != session.Accepted {
+		t.Fatalf("apply live caption: got %v, want %v", verdict, session.Accepted)
 	}
-	if got.messageType != websocket.TextMessage {
-		t.Fatalf("caption frame type = %d, want %d", got.messageType, websocket.TextMessage)
+	liveFrame := requireWebsocketRead(t, liveRead)
+	if liveFrame.err != nil {
+		t.Fatalf("read live caption: %v", liveFrame.err)
 	}
-	wantPayload, err := json.Marshal(wantCaption)
-	if err != nil {
-		t.Fatalf("marshal expected caption: %v", err)
+	if liveFrame.messageType != websocket.TextMessage {
+		t.Fatalf("live frame type = %d, want %d", liveFrame.messageType, websocket.TextMessage)
 	}
-	if string(got.payload) != string(wantPayload) {
-		t.Fatalf("caption payload = %s, want %s", got.payload, wantPayload)
+	if string(liveFrame.payload) != string(live.Encode()) {
+		t.Fatalf("live payload = %s, want %s", liveFrame.payload, live.Encode())
 	}
 
 	// The peer can receive bytes just before WriteMessage returns to the
 	// sender, so wait for the immediately-following accounting update.
-	requireSentSequence(t, f.client, 1)
+	requireSentSequence(t, f.client, 2)
 
 	cancel()
 	waitForWaitGroup(t, &wg)
@@ -843,6 +862,16 @@ func TestClientWritePumpStopsOnEachLifecycleSignal(t *testing.T) {
 			wg.Add(1)
 			go f.client.writePump(&wg, ctx)
 
+			// writePump always sends HISTORY before it waits on lifecycle
+			// signals. Reading it is also a deterministic readiness barrier.
+			history := requireWebsocketRead(t, readWebsocketAsync(f.peer))
+			if history.err != nil {
+				t.Fatalf("read initial HISTORY: %v", history.err)
+			}
+			if string(history.payload) != string(protocol.EncodeHistory(nil)) {
+				t.Fatalf("initial payload = %s, want empty HISTORY", history.payload)
+			}
+
 			tt.stop(f, cancel)
 			waitForWaitGroup(t, &wg)
 
@@ -856,24 +885,20 @@ func TestClientWritePumpStopsOnEachLifecycleSignal(t *testing.T) {
 
 func TestClientWritePumpStopsWhenSocketWriteFails(t *testing.T) {
 	// Implemented with Codex
-	// This test is necessary because a caption notification can race with peer
-	// disconnection; a failed data write must terminate the pump without leaking
-	// its keepalive goroutine.
+	// This test is necessary because failure to write the mandatory initial
+	// HISTORY must terminate the pump without leaking its keepalive goroutine.
 	f := newClientFixture(t)
+	f.client.close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go f.client.writePump(&wg, ctx)
-	waitForWritePumpStart()
-
-	f.client.close()
-	publishTestCaption(f.hub.sess, &protocol.SourceHello{
-		Type:    protocol.TypeSourceHello,
-		Session: "write-failure",
-	})
 	waitForWaitGroup(t, &wg)
+	if got := f.client.sentSeq; got != 0 {
+		t.Fatalf("sentSeq = %d after failed HISTORY write, want 0", got)
+	}
 }
 
 func TestClientWritePumpFlowControlWindowBoundary(t *testing.T) {
@@ -930,19 +955,19 @@ func TestClientWritePumpFlowControlWindowBoundary(t *testing.T) {
 			var wg sync.WaitGroup
 			wg.Add(1)
 			go f.client.writePump(&wg, ctx)
-			waitForWritePumpStart()
 
-			publishTestCaption(f.hub.sess, &protocol.SourceHello{
-				Type:    protocol.TypeSourceHello,
-				Session: "flow-control-boundary",
-			})
+			// The mandatory HISTORY is the eighth sent frame in this setup,
+			// so it exercises the boundary without requiring session updates.
 			select {
 			case got := <-textSeen:
 				if got.messageType != websocket.TextMessage {
-					t.Fatalf("caption frame type = %d, want %d", got.messageType, websocket.TextMessage)
+					t.Fatalf("HISTORY frame type = %d, want %d", got.messageType, websocket.TextMessage)
+				}
+				if string(got.payload) != string(protocol.EncodeHistory(nil)) {
+					t.Fatalf("initial payload = %s, want empty HISTORY", got.payload)
 				}
 			case <-time.After(clientTestTimeout):
-				t.Fatal("peer did not receive caption frame")
+				t.Fatal("peer did not receive initial HISTORY")
 			}
 
 			if tt.wantPing {
