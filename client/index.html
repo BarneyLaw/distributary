@@ -3,28 +3,73 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>LiveRecall Student Client</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
-    #status { font-weight: 700; }
-    #live { min-height: 6rem; border: 1px solid #bbb; border-radius: .4rem; padding: 1rem; margin: 1rem 0; }
-    .naive-line { padding: .25rem 0; border-bottom: 1px dotted #ddd; }
-    button { padding: .55rem .75rem; margin: .2rem; }
-    #recall { white-space: pre-wrap; margin-top: 1rem; border-left: 3px solid #ccc; padding-left: 1rem; }
-    .hint { font-size: .9rem; color: #555; }
-  </style>
+  <title>LiveRecall | Live Lecture Captions</title>
+  <meta name="description" content="Follow live lecture captions and review recent captions to catch up on what you missed.">
+  <meta name="application-name" content="LiveRecall">
+  <meta name="author" content="Distributary">
+  <meta name="theme-color" content="#f1f5f9">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" type="image/svg+xml" sizes="any" href="logo.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="recall.css">
 </head>
 <body>
-  <h1>LiveRecall</h1>
-  <p>Connection: <span id="status">disconnected</span></p>
-  <p class="hint">Starter behavior is intentionally naive: every received revision is appended as a new line.</p>
-  <div id="live"></div>
-  <div>
-    <button data-seconds="30">What did I miss? (30 s)</button>
-    <button data-seconds="15">15 s</button>
-    <button data-seconds="60">60 s</button>
-  </div>
-  <div id="recall">TODO: implement the locally maintained recall view.</div>
-  <script src="app.js"></script>
+  <header id="app-header">
+    <img src="logo.svg" width="48" height="48" alt="">
+    <h1>LiveRecall</h1>
+  </header>
+  <main id="classroom-layout">
+    <section id="live" class="live-empty" aria-labelledby="live-title">
+      <header id="live-header">
+        <h2 id="live-title">Live Caption</h2>
+        <span id="status" data-status="disconnected">disconnected</span>
+      </header>
+      <div id="live-history"></div>
+      <div id="live-current" aria-live="polite" aria-atomic="true">
+        <p id="live-placeholder">Waiting for lecture captions…</p>
+      </div>
+    </section>
+    <aside id="recall-panel" aria-label="Recent captions">
+      <button id="recall-toggle" type="button" aria-expanded="false" aria-controls="recall-content">
+        <span class="recall-heading-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2.6 7.4M3 4v7h7"/><path d="M12 7v5l3 2"/></svg>
+        </span>
+        <span class="recall-heading-copy">
+          <span class="recall-title">What did I miss?</span>
+          <span class="recall-subtitle">Review recent lecture captions</span>
+        </span>
+        <svg class="recall-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div id="recall-content" hidden>
+        <div class="recall-controls">
+          <div class="recall-window-options" role="group" aria-label="History window">
+            <button type="button" data-seconds="15" aria-pressed="false">15s</button>
+            <button type="button" data-seconds="30" aria-pressed="true">30s</button>
+            <button type="button" data-seconds="60" aria-pressed="false">60s</button>
+          </div>
+          <label for="recall-time-format">Time format
+            <span class="recall-select">
+              <select id="recall-time-format">
+                <option value="relative">Seconds ago</option>
+                <option value="local">Local time</option>
+              </select>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </label>
+        </div>
+        <p id="recall-summary"></p>
+        <div id="recall" role="list" aria-label="Caption snapshot"></div>
+        <div class="recall-footer">
+          <span id="recall-new" role="status" hidden></span>
+          <button id="recall-refresh" type="button" aria-label="Refresh caption snapshot" title="Refresh caption snapshot">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/></svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <footer id="site-footer">by Distributary</footer>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

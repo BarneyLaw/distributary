@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="logo-title logo-description">
+  <title id="logo-title">LiveRecall</title>
+  <desc id="logo-description">A navy L with a straight stem and upward-curving foot beside a blue R with a returning arrow, enclosed in a pale blue rounded square.</desc>
+  <rect x="2" y="2" width="124" height="124" rx="28" fill="#eff6ff" stroke="#dbeafe"/>
+  <g fill="none" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 28V84C24 94 30 100 40 100C47 100 50 95 50 88" stroke="#172033"/>
+    <g stroke="#2563eb">
+      <path d="M58 100V28H80C96 28 106 36 106 48S96 68 80 68H72"/>
+      <path d="M80 60L72 68L80 76M80 76L104 100"/>
+    </g>
+  </g>
+</svg>
