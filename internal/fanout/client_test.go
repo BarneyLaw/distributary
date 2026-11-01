@@ -800,14 +800,15 @@ func TestClientWritePumpDegradedModeSuppressesProvisionalButSendsFinal(t *testin
 	// Implemented with Codex
 	// Degraded mode is useful only if the status selected by the RTT detector
 	// reaches Session.Pick: obsolete provisional work must stop, while durable
-	// finals must continue to make progress.
+	// finals must continue to make progress. The final's acknowledgement must
+	// also let the client return to normal provisional delivery.
 	f := newClientFixture(t)
-	f.client.isDegraded = true
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
+	go f.client.readPump(&wg, cancel)
 	go f.client.writePump(&wg, ctx)
 
 	history := requireWebsocketRead(t, readWebsocketAsync(f.peer))
@@ -817,6 +818,12 @@ func TestClientWritePumpDegradedModeSuppressesProvisionalButSendsFinal(t *testin
 	if string(history.payload) != string(protocol.EncodeHistory(nil)) {
 		t.Fatalf("initial payload = %s, want empty HISTORY", history.payload)
 	}
+
+	// Enter degraded mode only after HISTORY. In production, degradation is
+	// learned from a flow-control pong after the connection is established.
+	f.client.mu.Lock()
+	f.client.isDegraded = true
+	f.client.mu.Unlock()
 
 	nextFrame := readWebsocketAsync(f.peer)
 	provisional := clientTestCaption(1, 1, false)
@@ -839,6 +846,22 @@ func TestClientWritePumpDegradedModeSuppressesProvisionalButSendsFinal(t *testin
 	}
 	if got.messageType != websocket.TextMessage || string(got.payload) != string(final.Encode()) {
 		t.Fatalf("degraded frame = type %d payload %s, want final %s", got.messageType, got.payload, final.Encode())
+	}
+
+	// Reading again allows the peer to process the acknowledgement ping sent
+	// after the degraded final. Its low RTT moves the server back to normal
+	// mode, where the newest pending provisional becomes eligible again.
+	recoveredFrame := readWebsocketAsync(f.peer)
+	recoveredProvisional := clientTestCaption(2, 1, false)
+	if verdict := f.hub.sess.Apply(recoveredProvisional); verdict != session.Accepted {
+		t.Fatalf("apply recovery provisional: got %v, want %v", verdict, session.Accepted)
+	}
+	recovered := requireWebsocketRead(t, recoveredFrame)
+	if recovered.err != nil {
+		t.Fatalf("read provisional after recovery: %v", recovered.err)
+	}
+	if recovered.messageType != websocket.TextMessage || string(recovered.payload) != string(recoveredProvisional.Encode()) {
+		t.Fatalf("recovered frame = type %d payload %s, want provisional %s", recovered.messageType, recovered.payload, recoveredProvisional.Encode())
 	}
 
 	cancel()

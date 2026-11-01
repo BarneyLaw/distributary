@@ -209,9 +209,11 @@ func (c *client) write(caption []byte, writerCtx context.Context) error {
 	isExceedingWindow := c.sentSeq-c.ackedSeq >= c.hub.maxInFlight
 	cpSentSeq := c.sentSeq
 	acked := c.acked
+	isDegraded := c.isDegraded
 	c.mu.Unlock()
 
-	if isExceedingWindow {
+	// When client is degraded, every sequence shall trigger ack to re-evaluate the status. This supports rapid-convergence.
+	if isExceedingWindow || isDegraded {
 		return c.startPingingMode(cpSentSeq, writerCtx, acked)
 	}
 	return nil
