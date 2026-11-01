@@ -6,6 +6,8 @@
 #   make check           the professor's submission_check.py
 #   make verify-harness  prove the professor's files are unmodified
 #   make t1 ... make t4  public tests T1-T4, 3 runs each, results in experiments/results/
+#                        (pick the server with DISTRIBUTARY_MODE=live or =naive)
+#   make e2e             browser end-to-end test: 3 browser pages, an outage, a late join
 #   make py-baseline     the original Python starter server, same harness, for comparison
 
 GO      ?= go
@@ -16,7 +18,7 @@ ARCH    := $(shell $(GO) env GOARCH)
 GOBUILD := CGO_ENABLED=0 GOOS=linux $(GO) build -trimpath -ldflags '-s -w'
 RESULTS := ../experiments/results
 
-.PHONY: build bins vet test check verify-harness t1 t2 t3 t4 py-baseline clean
+.PHONY: build bins vet test check verify-harness t1 t2 t3 t4 e2e py-baseline clean
 
 build:
 	$(GOBUILD) -o $(BIN)/distributary-linux-$(ARCH) $(PKG)
@@ -52,6 +54,10 @@ t3: build
 t4: build
 	cd harness && $(PY) run_demo.py --clients 100 --duration 60 --runs 3 --quiet-server \
 		--disconnect-percent 20 --disconnect-at 15 --disconnect-seconds 5 --output-stem $(RESULTS)/t4
+
+# Needs: pip install playwright && python -m playwright install chromium
+e2e: build
+	$(PY) experiments/run/browser_e2e.py
 
 # Runs the professor's original Python server through the same harness, in a
 # scratch copy so nothing in harness/ changes. Override ARGS for other tests:
