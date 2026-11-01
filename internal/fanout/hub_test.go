@@ -118,6 +118,9 @@ func TestNewHubInitializesUsableDefaults(t *testing.T) {
 	if h.maxMessageSize != 1<<20 {
 		t.Fatalf("maxMessageSize = %d, want %d", h.maxMessageSize, 1<<20)
 	}
+	if h.maxInFlight != 4 {
+		t.Fatalf("maxMessageSize = %d, want %d", h.maxInFlight, 4)
+	}
 	if h.pingInterval != 20*time.Second {
 		t.Fatalf("pingInterval = %v, want %v", h.pingInterval, 20*time.Second)
 	}
@@ -126,6 +129,12 @@ func TestNewHubInitializesUsableDefaults(t *testing.T) {
 	}
 	if h.controlTimeout != 5*time.Second {
 		t.Fatalf("controlTimeout = %v, want %v", h.controlTimeout, 5*time.Second)
+	}
+	if h.queueDelayTreshold != 30*time.Millisecond {
+		t.Fatalf("queueDelayTreshold = %v, want %v", h.queueDelayTreshold, 30*time.Millisecond)
+	}
+	if h.modeThreshold != 2 {
+		t.Fatalf("modeThreshold = %v, want %v", h.modeThreshold, 2)
 	}
 	if h.shutdown == nil || h.shutdownFunc == nil {
 		t.Fatal("NewHub did not initialize shutdown state")

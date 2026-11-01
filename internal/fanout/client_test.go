@@ -2,6 +2,7 @@ package fanout
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -131,7 +132,15 @@ func newClientFixture(t *testing.T) clientFixture {
 			Session:        "client-test-session",
 			HistorySeconds: 30,
 		},
-		acked: make(chan struct{}),
+		timeSent:       time.Time{},
+		timeAcked:      time.Time{},
+		sampleRTT:      0 * time.Millisecond,
+		sRTT:           0 * time.Millisecond,
+		minRTT:         time.Hour,
+		queueDelay:     0 * time.Millisecond,
+		thresholdCount: 0,
+		isDegraded:     false,
+		acked:          make(chan struct{}),
 	}
 	t.Cleanup(func() {
 		c.close()
@@ -225,6 +234,158 @@ func requireWebsocketRead(t *testing.T, result <-chan websocketRead) websocketRe
 	}
 }
 
+func TestClientRTTEstimatorTracksMinimumAndSmoothedRTT(t *testing.T) {
+	// Implemented with Codex
+	// The minimum must remain the best connection-lifetime sample, while SRTT
+	// follows the RFC-style 1/8 EWMA used by the queue-delay detector.
+	c := &client{minRTT: time.Hour}
+	tests := []struct {
+		name     string
+		sample   time.Duration
+		wantMin  time.Duration
+		wantSRTT time.Duration
+	}{
+		{
+			name:     "first sample initializes both estimators",
+			sample:   40 * time.Millisecond,
+			wantMin:  40 * time.Millisecond,
+			wantSRTT: 40 * time.Millisecond,
+		},
+		{
+			name:     "higher sample only raises the smoothed estimate",
+			sample:   120 * time.Millisecond,
+			wantMin:  40 * time.Millisecond,
+			wantSRTT: 50 * time.Millisecond,
+		},
+		{
+			name:     "new minimum lowers the baseline immediately",
+			sample:   20 * time.Millisecond,
+			wantMin:  20 * time.Millisecond,
+			wantSRTT: 46*time.Millisecond + 250*time.Microsecond,
+		},
+	}
+
+	for _, tt := range tests {
+		c.sampleRTT = tt.sample
+		c.computeMinRTT()
+		c.computeSRTT(0.125)
+
+		if c.minRTT != tt.wantMin {
+			t.Fatalf("%s: minRTT = %v, want %v", tt.name, c.minRTT, tt.wantMin)
+		}
+		if c.sRTT != tt.wantSRTT {
+			t.Fatalf("%s: sRTT = %v, want %v", tt.name, c.sRTT, tt.wantSRTT)
+		}
+	}
+}
+
+func TestClientQueueDelayEntersDegradedAndRecoversFromRawSample(t *testing.T) {
+	// Implemented with Codex
+	// Entry deliberately uses consecutive smoothed queue-delay observations,
+	// while recovery uses the latest raw sample so it does not wait for the
+	// EWMA to decay after the client's queue drains.
+	c := &client{
+		hub: &hub{
+			queueDelayTreshold: 30 * time.Millisecond,
+			modeThreshold:      2,
+		},
+		minRTT: time.Hour,
+	}
+
+	observe := func(sample time.Duration) {
+		t.Helper()
+		c.sampleRTT = sample
+		c.computeMinRTT()
+		c.computeSRTT(0.125)
+		c.computeQueueDelay()
+		c.determineStatus()
+	}
+
+	observe(20 * time.Millisecond)
+	observe(20 * time.Millisecond)
+	if c.isDegraded {
+		t.Fatal("client became degraded after baseline RTT observations")
+	}
+
+	observe(500 * time.Millisecond)
+	if c.queueDelay != 60*time.Millisecond {
+		t.Fatalf("first high queueDelay = %v, want %v", c.queueDelay, 60*time.Millisecond)
+	}
+	if c.thresholdCount != 1 || c.isDegraded {
+		t.Fatalf("after first high observation: count=%d degraded=%t, want count=1 degraded=false", c.thresholdCount, c.isDegraded)
+	}
+
+	observe(500 * time.Millisecond)
+	if c.queueDelay != 112*time.Millisecond+500*time.Microsecond {
+		t.Fatalf("second high queueDelay = %v, want %v", c.queueDelay, 112*time.Millisecond+500*time.Microsecond)
+	}
+	if c.thresholdCount != 2 || !c.isDegraded {
+		t.Fatalf("after second high observation: count=%d degraded=%t, want count=2 degraded=true", c.thresholdCount, c.isDegraded)
+	}
+
+	observe(500 * time.Millisecond)
+	if !c.isDegraded {
+		t.Fatal("client recovered while its raw queue delay was still high")
+	}
+
+	observe(25 * time.Millisecond)
+	sampleQueueDelay := c.sampleRTT - c.minRTT
+	if sampleQueueDelay != 5*time.Millisecond {
+		t.Fatalf("recovery sample queue delay = %v, want %v", sampleQueueDelay, 5*time.Millisecond)
+	}
+	if c.queueDelay <= c.hub.queueDelayTreshold {
+		t.Fatalf("smoothed queue delay = %v, want it still above %v to prove raw-sample recovery", c.queueDelay, c.hub.queueDelayTreshold)
+	}
+	if c.isDegraded {
+		t.Fatal("client did not recover on a low raw queue-delay sample")
+	}
+}
+
+func TestClientAdvancingPongRecordsRTTSample(t *testing.T) {
+	// Implemented with Codex
+	// This integration check guards the time.Duration unit conversion at the
+	// pong boundary and proves the first sample initializes all RTT baselines.
+	f := newClientFixture(t)
+	f.client.sentSeq = 1
+	f.client.timeSent = time.Now().Add(-50 * time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go f.client.readPump(&wg, cancel)
+
+	if err := f.peer.WriteControl(websocket.PongMessage, protocol.EncodeAck(1), time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("send acknowledgement pong: %v", err)
+	}
+	if err := f.peer.WriteControl(websocket.CloseMessage, nil, time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("send close frame: %v", err)
+	}
+	waitForWaitGroup(t, &wg)
+
+	f.client.mu.Lock()
+	sampleRTT := f.client.sampleRTT
+	minRTT := f.client.minRTT
+	sRTT := f.client.sRTT
+	queueDelay := f.client.queueDelay
+	f.client.mu.Unlock()
+
+	if sampleRTT < 50*time.Millisecond {
+		t.Fatalf("sampleRTT = %v, want at least %v", sampleRTT, 50*time.Millisecond)
+	}
+	if sampleRTT >= clientTestTimeout {
+		t.Fatalf("sampleRTT = %v, want less than test timeout %v", sampleRTT, clientTestTimeout)
+	}
+	if minRTT != sampleRTT || sRTT != sampleRTT {
+		t.Fatalf("first RTT estimates = min %v, smoothed %v; want both %v", minRTT, sRTT, sampleRTT)
+	}
+	if queueDelay != 0 {
+		t.Fatalf("first queueDelay = %v, want 0", queueDelay)
+	}
+	if err := ctx.Err(); err != context.Canceled {
+		t.Fatalf("readPump context error = %v, want %v", err, context.Canceled)
+	}
+}
+
 func TestClientCloseIsIdempotentUnderConcurrency(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because the read pump, write pump, and cleanup path
@@ -291,58 +452,72 @@ func TestClientPingSendsEncodedSequence(t *testing.T) {
 	_ = requireWebsocketRead(t, peerRead)
 }
 
-func TestClientKeepaliveSendsPingAndStops(t *testing.T) {
+func TestClientWritePumpSendsKeepalivePingWhenIdle(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because an idle client has no caption traffic to
-	// prove liveness; keepalive must emit a control ping and release its goroutine
-	// promptly when the writer asks it to stop.
+	// prove liveness; writePump must emit a keepalive control ping while it waits
+	// for new session state.
 	f := newClientFixture(t)
 	f.hub.pingInterval = 5 * time.Millisecond
 
-	pingSeen := make(chan struct{}, 1)
-	f.peer.SetPingHandler(func(string) error {
-		pingSeen <- struct{}{}
+	pingPayload := make(chan string, 1)
+	f.peer.SetPingHandler(func(payload string) error {
+		pingPayload <- payload
 		return nil
 	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go f.client.writePump(&wg, ctx)
+
+	history := requireWebsocketRead(t, readWebsocketAsync(f.peer))
+	if history.err != nil {
+		t.Fatalf("read initial HISTORY: %v", history.err)
+	}
+	if string(history.payload) != string(protocol.EncodeHistory(nil)) {
+		t.Fatalf("initial payload = %s, want empty HISTORY", history.payload)
+	}
+
+	// Control frames are processed while a data-frame read is in progress.
 	peerRead := readWebsocketAsync(f.peer)
 
-	keepaliveCtx, cancel := context.WithCancel(context.Background())
-	stop := f.client.keepalive(cancel)
-
 	select {
-	case <-pingSeen:
+	case payload := <-pingPayload:
+		if payload != "" {
+			t.Fatalf("keepalive payload = %x, want empty payload", payload)
+		}
 	case <-time.After(clientTestTimeout):
-		t.Fatal("keepalive did not send a ping")
-	}
-	stop()
-
-	select {
-	case <-keepaliveCtx.Done():
-	case <-time.After(clientTestTimeout):
-		t.Fatal("keepalive goroutine did not stop")
+		t.Fatal("idle writePump did not send a keepalive ping")
 	}
 
-	f.client.close()
+	cancel()
+	waitForWaitGroup(t, &wg)
 	_ = requireWebsocketRead(t, peerRead)
 }
 
-func TestClientKeepaliveCancelsContextWhenPingFails(t *testing.T) {
+func TestClientWritePumpStopsWhenKeepalivePingFails(t *testing.T) {
 	// Implemented with Codex
-	// This test is necessary because a failed keepalive write is how the writer
-	// learns that a silent or broken connection must be abandoned.
+	// This test is necessary because writePump now owns keepalive writes and must
+	// terminate when an idle connection can no longer accept a control frame.
 	f := newClientFixture(t)
 	f.hub.pingInterval = 5 * time.Millisecond
-	f.client.close()
 
-	keepaliveCtx, cancel := context.WithCancel(context.Background())
-	stop := f.client.keepalive(cancel)
-	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go f.client.writePump(&wg, ctx)
 
-	select {
-	case <-keepaliveCtx.Done():
-	case <-time.After(clientTestTimeout):
-		t.Fatal("failed keepalive ping did not cancel its context")
+	history := requireWebsocketRead(t, readWebsocketAsync(f.peer))
+	if history.err != nil {
+		t.Fatalf("read initial HISTORY: %v", history.err)
 	}
+
+	// Closing the server side makes the next keepalive WriteControl fail. The
+	// writer has no other pending work that could make it exit first.
+	f.client.close()
+	waitForWaitGroup(t, &wg)
 }
 
 func TestClientReadPumpAppliesOnlyValidProgressingAcknowledgements(t *testing.T) {
@@ -541,6 +716,158 @@ func TestClientWritePumpSendsHistoryThenLiveCaption(t *testing.T) {
 	waitForWaitGroup(t, &wg)
 }
 
+func TestClientWritePumpClosesTryAgainLaterWhenCursorFallsBehind(t *testing.T) {
+	// Implemented with Codex
+	// A client whose next required final has left the bounded session ring
+	// cannot continue its current cursor safely. The writer must identify this
+	// as a recoverable overload condition so the peer can reconnect with its
+	// finalized resume position and obtain HISTORY.
+	f := newClientFixture(t)
+	f.hub.sess = session.New(session.Config{
+		Retention: time.Hour,
+		MaxFinals: 2,
+		MaxActive: 16,
+	})
+	f.hub.maxInFlight = 1
+	f.hub.pongTimeout = time.Second
+
+	// Hold the writer at the flow-control boundary after HISTORY. This makes
+	// the subsequent ring eviction deterministic instead of racing writePump.
+	flowPing := make(chan string, 1)
+	f.peer.SetPingHandler(func(payload string) error {
+		flowPing <- payload
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var pumps sync.WaitGroup
+	pumps.Add(2)
+	go f.client.readPump(&pumps, cancel)
+	go f.client.writePump(&pumps, ctx)
+
+	history := requireWebsocketRead(t, readWebsocketAsync(f.peer))
+	if history.err != nil {
+		t.Fatalf("read initial HISTORY: %v", history.err)
+	}
+	if history.messageType != websocket.TextMessage || string(history.payload) != string(protocol.EncodeHistory(nil)) {
+		t.Fatalf("initial frame = type %d payload %s, want empty HISTORY", history.messageType, history.payload)
+	}
+
+	closed := readWebsocketAsync(f.peer)
+	var pingPayload string
+	select {
+	case pingPayload = <-flowPing:
+	case <-time.After(clientTestTimeout):
+		t.Fatal("writer did not reach the flow-control boundary")
+	}
+
+	for segment := int64(1); segment <= 3; segment++ {
+		caption := clientTestCaption(segment, 1, true)
+		if verdict := f.hub.sess.Apply(caption); verdict != session.Accepted {
+			t.Fatalf("apply final segment %d: got %v, want %v", segment, verdict, session.Accepted)
+		}
+	}
+
+	if err := f.peer.WriteControl(
+		websocket.PongMessage,
+		[]byte(pingPayload),
+		time.Now().Add(time.Second),
+	); err != nil {
+		t.Fatalf("release flow-controlled writer: %v", err)
+	}
+
+	result := requireWebsocketRead(t, closed)
+	if result.err == nil {
+		t.Fatalf("peer read unexpectedly succeeded: type=%d payload=%q", result.messageType, result.payload)
+	}
+	var closeErr *websocket.CloseError
+	if !errors.As(result.err, &closeErr) {
+		t.Fatalf("peer error = %T %v, want *websocket.CloseError", result.err, result.err)
+	}
+	if closeErr.Code != websocket.CloseTryAgainLater {
+		t.Fatalf("close code = %d, want %d", closeErr.Code, websocket.CloseTryAgainLater)
+	}
+	const wantReason = "Client fell behind retained history"
+	if closeErr.Text != wantReason {
+		t.Fatalf("close reason = %q, want %q", closeErr.Text, wantReason)
+	}
+
+	waitForWaitGroup(t, &pumps)
+}
+
+func TestClientWritePumpDegradedModeSuppressesProvisionalButSendsFinal(t *testing.T) {
+	// Implemented with Codex
+	// Degraded mode is useful only if the status selected by the RTT detector
+	// reaches Session.Pick: obsolete provisional work must stop, while durable
+	// finals must continue to make progress. The final's acknowledgement must
+	// also let the client return to normal provisional delivery.
+	f := newClientFixture(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go f.client.readPump(&wg, cancel)
+	go f.client.writePump(&wg, ctx)
+
+	history := requireWebsocketRead(t, readWebsocketAsync(f.peer))
+	if history.err != nil {
+		t.Fatalf("read initial HISTORY: %v", history.err)
+	}
+	if string(history.payload) != string(protocol.EncodeHistory(nil)) {
+		t.Fatalf("initial payload = %s, want empty HISTORY", history.payload)
+	}
+
+	// Enter degraded mode only after HISTORY. In production, degradation is
+	// learned from a flow-control pong after the connection is established.
+	f.client.mu.Lock()
+	f.client.isDegraded = true
+	f.client.mu.Unlock()
+
+	nextFrame := readWebsocketAsync(f.peer)
+	provisional := clientTestCaption(1, 1, false)
+	if verdict := f.hub.sess.Apply(provisional); verdict != session.Accepted {
+		t.Fatalf("apply provisional caption: got %v, want %v", verdict, session.Accepted)
+	}
+	select {
+	case got := <-nextFrame:
+		t.Fatalf("degraded client received provisional frame: type=%d payload=%s err=%v", got.messageType, got.payload, got.err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	final := clientTestCaption(1, 2, true)
+	if verdict := f.hub.sess.Apply(final); verdict != session.Accepted {
+		t.Fatalf("apply final caption: got %v, want %v", verdict, session.Accepted)
+	}
+	got := requireWebsocketRead(t, nextFrame)
+	if got.err != nil {
+		t.Fatalf("read final caption: %v", got.err)
+	}
+	if got.messageType != websocket.TextMessage || string(got.payload) != string(final.Encode()) {
+		t.Fatalf("degraded frame = type %d payload %s, want final %s", got.messageType, got.payload, final.Encode())
+	}
+
+	// Reading again allows the peer to process the acknowledgement ping sent
+	// after the degraded final. Its low RTT moves the server back to normal
+	// mode, where the newest pending provisional becomes eligible again.
+	recoveredFrame := readWebsocketAsync(f.peer)
+	recoveredProvisional := clientTestCaption(2, 1, false)
+	if verdict := f.hub.sess.Apply(recoveredProvisional); verdict != session.Accepted {
+		t.Fatalf("apply recovery provisional: got %v, want %v", verdict, session.Accepted)
+	}
+	recovered := requireWebsocketRead(t, recoveredFrame)
+	if recovered.err != nil {
+		t.Fatalf("read provisional after recovery: %v", recovered.err)
+	}
+	if recovered.messageType != websocket.TextMessage || string(recovered.payload) != string(recoveredProvisional.Encode()) {
+		t.Fatalf("recovered frame = type %d payload %s, want provisional %s", recovered.messageType, recovered.payload, recoveredProvisional.Encode())
+	}
+
+	cancel()
+	waitForWaitGroup(t, &wg)
+}
+
 func TestClientWriteSendsCaptionBelowFlowControlWindow(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because write now owns the data-frame write and
@@ -549,12 +876,10 @@ func TestClientWriteSendsCaptionBelowFlowControlWindow(t *testing.T) {
 	f := newClientFixture(t)
 	peerRead := readWebsocketAsync(f.peer)
 	writerCtx, cancelWriter := context.WithCancel(context.Background())
-	keepAliveCtx, cancelKeepAlive := context.WithCancel(context.Background())
 	defer cancelWriter()
-	defer cancelKeepAlive()
 
 	wantPayload := []byte(`{"caption":"below-window"}`)
-	if err := f.client.write(wantPayload, writerCtx, keepAliveCtx); err != nil {
+	if err := f.client.write(wantPayload, writerCtx); err != nil {
 		t.Fatalf("write returned an unexpected error: %v", err)
 	}
 
@@ -588,7 +913,7 @@ func TestClientWriteReturnsSocketErrorWithoutAdvancingSequence(t *testing.T) {
 	f := newClientFixture(t)
 	f.client.close()
 
-	err := f.client.write([]byte("unwritten"), context.Background(), context.Background())
+	err := f.client.write([]byte("unwritten"), context.Background())
 	if err == nil {
 		t.Fatal("write succeeded on a closed connection")
 	}
@@ -603,10 +928,10 @@ func TestClientWriteReturnsSocketErrorWithoutAdvancingSequence(t *testing.T) {
 func TestClientWriteAtWindowLimitWaitsForReadPumpAcknowledgement(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because write and readPump coordinate through the
-	// acked channel: the eighth outstanding frame must ping, wait, then resume
+	// acked channel: the fourth outstanding frame must ping, wait, then resume
 	// only after a valid cumulative pong advances ackedSeq.
 	f := newClientFixture(t)
-	f.client.sentSeq = 7
+	f.client.sentSeq = 3
 	originalAcked := f.client.acked
 
 	pingPayload := make(chan []byte, 1)
@@ -637,13 +962,11 @@ func TestClientWriteAtWindowLimitWaitsForReadPumpAcknowledgement(t *testing.T) {
 	go f.client.readPump(&readerWG, cancelReader)
 
 	writerCtx, cancelWriter := context.WithCancel(context.Background())
-	keepAliveCtx, cancelKeepAlive := context.WithCancel(context.Background())
 	defer cancelWriter()
-	defer cancelKeepAlive()
 	writeResult := make(chan error, 1)
 	wantPayload := []byte(`{"caption":"window-limit"}`)
 	go func() {
-		writeResult <- f.client.write(wantPayload, writerCtx, keepAliveCtx)
+		writeResult <- f.client.write(wantPayload, writerCtx)
 	}()
 
 	select {
@@ -660,8 +983,8 @@ func TestClientWriteAtWindowLimitWaitsForReadPumpAcknowledgement(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode flow-control ping: %v", err)
 		}
-		if sequence != 8 {
-			t.Fatalf("flow-control ping sequence = %d, want 8", sequence)
+		if sequence != 4 {
+			t.Fatalf("flow-control ping sequence = %d, want 4", sequence)
 		}
 	case <-time.After(clientTestTimeout):
 		t.Fatal("peer did not receive a flow-control ping")
@@ -680,8 +1003,8 @@ func TestClientWriteAtWindowLimitWaitsForReadPumpAcknowledgement(t *testing.T) {
 	gotAckedSeq := f.client.ackedSeq
 	currentAcked := f.client.acked
 	f.client.mu.Unlock()
-	if gotSentSeq != 8 || gotAckedSeq != 8 {
-		t.Fatalf("sequence state = sent %d, acked %d; want sent 8, acked 8", gotSentSeq, gotAckedSeq)
+	if gotSentSeq != 4 || gotAckedSeq != 4 {
+		t.Fatalf("sequence state = sent %d, acked %d; want sent 4, acked 4", gotSentSeq, gotAckedSeq)
 	}
 	if currentAcked == originalAcked {
 		t.Fatal("readPump did not rotate the acknowledgement notification channel")
@@ -699,6 +1022,120 @@ func TestClientWriteAtWindowLimitWaitsForReadPumpAcknowledgement(t *testing.T) {
 	case <-time.After(clientTestTimeout):
 		t.Fatal("peer reader did not stop after the client connection closed")
 	}
+}
+
+func TestClientFlowControlDistinguishesProgressingSlowFromStalled(t *testing.T) {
+	// Implemented with Codex
+	// A slow client may take a substantial fraction of pongTimeout to advance
+	// each ACK. Its connection must survive for longer than one pongTimeout as
+	// long as every flow-control pause eventually observes forward progress. A
+	// client whose ACK never advances must cause writePump to close the socket.
+	t.Run("continually progressing slow client remains connected", func(t *testing.T) {
+		f := newClientFixture(t)
+		f.hub.maxInFlight = 1
+		f.hub.pongTimeout = 200 * time.Millisecond
+
+		const rounds = 4
+		const pongDelay = 60 * time.Millisecond
+		f.peer.SetPingHandler(func(payload string) error {
+			time.Sleep(pongDelay)
+			return f.peer.WriteControl(
+				websocket.PongMessage,
+				[]byte(payload),
+				time.Now().Add(time.Second),
+			)
+		})
+
+		peerReadDone := make(chan error, 1)
+		go func() {
+			for {
+				if _, _, err := f.peer.ReadMessage(); err != nil {
+					peerReadDone <- err
+					return
+				}
+			}
+		}()
+
+		readerCtx, cancelReader := context.WithCancel(context.Background())
+		defer cancelReader()
+		var readerWG sync.WaitGroup
+		readerWG.Add(1)
+		go f.client.readPump(&readerWG, cancelReader)
+
+		started := time.Now()
+		for i := 0; i < rounds; i++ {
+			if err := f.client.write([]byte(`{"caption":"slow-progress"}`), readerCtx); err != nil {
+				t.Fatalf("write %d rejected progressing slow client: %v", i+1, err)
+			}
+		}
+		elapsed := time.Since(started)
+		if elapsed < f.hub.pongTimeout {
+			t.Fatalf("writes completed in %v, want at least one dead-client timeout %v", elapsed, f.hub.pongTimeout)
+		}
+
+		f.client.mu.Lock()
+		gotSentSeq := f.client.sentSeq
+		gotAckedSeq := f.client.ackedSeq
+		f.client.mu.Unlock()
+		if gotSentSeq != rounds || gotAckedSeq != rounds {
+			t.Fatalf("sequence state = sent %d, acked %d; want sent %d, acked %d", gotSentSeq, gotAckedSeq, rounds, rounds)
+		}
+		if got := f.transportCloseCalls.Load(); got != 0 {
+			t.Fatalf("progressing slow client was disconnected after %d transport closes", got)
+		}
+
+		if err := f.peer.WriteControl(websocket.CloseMessage, nil, time.Now().Add(time.Second)); err != nil {
+			t.Fatalf("close progressing peer: %v", err)
+		}
+		waitForWaitGroup(t, &readerWG)
+		select {
+		case <-peerReadDone:
+		case <-time.After(clientTestTimeout):
+			t.Fatal("progressing peer reader did not stop during cleanup")
+		}
+	})
+
+	t.Run("stalled client is disconnected", func(t *testing.T) {
+		f := newClientFixture(t)
+		f.hub.maxInFlight = 1
+		f.hub.pongTimeout = 150 * time.Millisecond
+
+		pingSeen := make(chan struct{}, 1)
+		f.peer.SetPingHandler(func(string) error {
+			pingSeen <- struct{}{}
+			return nil // Deliberately do not advance the ACK.
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var writerWG sync.WaitGroup
+		writerWG.Add(1)
+		go f.client.writePump(&writerWG, ctx)
+
+		history := requireWebsocketRead(t, readWebsocketAsync(f.peer))
+		if history.err != nil {
+			t.Fatalf("read initial HISTORY: %v", history.err)
+		}
+		if string(history.payload) != string(protocol.EncodeHistory(nil)) {
+			t.Fatalf("initial payload = %s, want empty HISTORY", history.payload)
+		}
+
+		closed := readWebsocketAsync(f.peer)
+		select {
+		case <-pingSeen:
+		case <-time.After(clientTestTimeout):
+			t.Fatal("stalled peer did not receive a flow-control ping")
+		}
+
+		waitForWaitGroup(t, &writerWG)
+		result := requireWebsocketRead(t, closed)
+		if result.err == nil {
+			t.Fatal("stalled peer remained connected after its ACK stopped advancing")
+		}
+		if got := f.transportCloseCalls.Load(); got != 1 {
+			t.Fatalf("transport close calls = %d, want 1 after stalled-client timeout", got)
+		}
+	})
 }
 
 func TestClientStartPingingModeStopsOnEachLifecycleSignal(t *testing.T) {
@@ -719,11 +1156,6 @@ func TestClientStartPingingModeStopsOnEachLifecycleSignal(t *testing.T) {
 			signal: "writer",
 		},
 		{
-			name:   "keepalive cancellation",
-			why:    "a failed keepalive means the connection must not remain in pinging mode",
-			signal: "keepalive",
-		},
-		{
 			name:   "hub shutdown",
 			why:    "global shutdown must release a writer blocked in flow control",
 			signal: "hub",
@@ -736,9 +1168,7 @@ func TestClientStartPingingModeStopsOnEachLifecycleSignal(t *testing.T) {
 			f := newClientFixture(t)
 			acked := make(chan struct{})
 			writerCtx, cancelWriter := context.WithCancel(context.Background())
-			keepAliveCtx, cancelKeepAlive := context.WithCancel(context.Background())
 			defer cancelWriter()
-			defer cancelKeepAlive()
 
 			pingPayload := make(chan []byte, 1)
 			f.peer.SetPingHandler(func(payload string) error {
@@ -748,7 +1178,7 @@ func TestClientStartPingingModeStopsOnEachLifecycleSignal(t *testing.T) {
 			peerRead := readWebsocketAsync(f.peer)
 			result := make(chan error, 1)
 			go func() {
-				result <- f.client.startPingingMode(17, writerCtx, keepAliveCtx, acked)
+				result <- f.client.startPingingMode(17, writerCtx, acked)
 			}()
 
 			select {
@@ -769,8 +1199,6 @@ func TestClientStartPingingModeStopsOnEachLifecycleSignal(t *testing.T) {
 				close(acked)
 			case "writer":
 				cancelWriter()
-			case "keepalive":
-				cancelKeepAlive()
 			case "hub":
 				f.hub.shutdownFunc()
 			default:
@@ -797,12 +1225,11 @@ func TestClientStartPingingModeRejectsDeadClient(t *testing.T) {
 	// This test is necessary because a client that never advances its ACK must
 	// eventually release the blocked writer with an explicit dead-client error.
 	f := newClientFixture(t)
-	f.hub.pingInterval = 20 * time.Millisecond
+	f.hub.pongTimeout = 20 * time.Millisecond
 	peerRead := readWebsocketAsync(f.peer)
 
 	err := f.client.startPingingMode(
 		8,
-		context.Background(),
 		context.Background(),
 		make(chan struct{}),
 	)
@@ -823,7 +1250,6 @@ func TestClientStartPingingModeReturnsPingFailure(t *testing.T) {
 
 	err := f.client.startPingingMode(
 		8,
-		context.Background(),
 		context.Background(),
 		make(chan struct{}),
 	)
@@ -886,7 +1312,7 @@ func TestClientWritePumpStopsOnEachLifecycleSignal(t *testing.T) {
 func TestClientWritePumpStopsWhenSocketWriteFails(t *testing.T) {
 	// Implemented with Codex
 	// This test is necessary because failure to write the mandatory initial
-	// HISTORY must terminate the pump without leaking its keepalive goroutine.
+	// HISTORY must terminate the pump before it enters its keepalive wait loop.
 	f := newClientFixture(t)
 	f.client.close()
 
@@ -911,18 +1337,18 @@ func TestClientWritePumpFlowControlWindowBoundary(t *testing.T) {
 		wantPingSeq uint64
 	}{
 		{
-			name:        "seven outstanding messages do not ping",
-			why:         "the client should use all seven slots below the configured threshold without extra control traffic",
+			name:        "three outstanding messages do not ping",
+			why:         "the client should use all three slots below the configured threshold without extra control traffic",
 			ackedSeq:    1,
 			wantPing:    false,
 			wantPingSeq: 0,
 		},
 		{
-			name:        "eight outstanding messages request acknowledgement",
+			name:        "four outstanding messages request acknowledgement",
 			why:         "reaching the window limit must solicit a cumulative ACK carrying the newest sent sequence",
 			ackedSeq:    0,
 			wantPing:    true,
-			wantPingSeq: 8,
+			wantPingSeq: 4,
 		},
 	}
 
@@ -930,7 +1356,7 @@ func TestClientWritePumpFlowControlWindowBoundary(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("necessity: %s", tt.why)
 			f := newClientFixture(t)
-			f.client.sentSeq = 7
+			f.client.sentSeq = 3
 			f.client.ackedSeq = tt.ackedSeq
 
 			pingPayload := make(chan []byte, 1)
@@ -956,7 +1382,7 @@ func TestClientWritePumpFlowControlWindowBoundary(t *testing.T) {
 			wg.Add(1)
 			go f.client.writePump(&wg, ctx)
 
-			// The mandatory HISTORY is the eighth sent frame in this setup,
+			// The mandatory HISTORY is the fourth sent frame in this setup,
 			// so it exercises the boundary without requiring session updates.
 			select {
 			case got := <-textSeen:
