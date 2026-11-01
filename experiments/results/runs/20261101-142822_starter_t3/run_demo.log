@@ -1,0 +1,106 @@
+Starting 100 clients; slow=10, disconnecting=0, late=0
+SOURCE_DONE: emitted 76 finalized segments
+Results written to /home/barney/distributary/experiments/results/runs/20261101-142822_starter_t3/t3_run01.csv
+Starting 100 clients; slow=10, disconnecting=0, late=0
+SOURCE_DONE: emitted 76 finalized segments
+Results written to /home/barney/distributary/experiments/results/runs/20261101-142822_starter_t3/t3_run02.csv
+Starting 100 clients; slow=10, disconnecting=0, late=0
+SOURCE_DONE: emitted 76 finalized segments
+Results written to /home/barney/distributary/experiments/results/runs/20261101-142822_starter_t3/t3_run03.csv
+
+=== Run 1/3 ===
+Clients=100, duration=60.0s, source segments=76
+LiveRecall Results
+==================
+Clients observed:              100
+Live caption messages:         21700
+Recovered history items:       0
+Accepted messages:             21700
+Recovered messages:            0
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               10.38 ms
+P95 caption age:               2259.09 ms
+P99 caption age:               24086.87 ms
+Fresh Caption Ratio (<=500 ms): 94.65%
+Fresh Final Caption Ratio (<=500 ms): 90.00%
+Successful connections:        100
+Connection errors:             0
+Unique final captions:         7230/7600
+Final-caption completeness:    95.13%
+Unique live revisions:         21700/22800
+Normal Update Coverage:        95.18%
+
+Slow-reader isolation
+---------------------
+Normal clients: P50=10.11 ms, P95=24.06 ms, Fresh=100.00% (20520 msgs)
+Slow clients:   P50=14744.58 ms, P95=28159.98 ms, Fresh=1.69% (1180 msgs)
+
+=== Run 2/3 ===
+Clients=100, duration=60.0s, source segments=76
+LiveRecall Results
+==================
+Clients observed:              100
+Live caption messages:         21700
+Recovered history items:       0
+Accepted messages:             21700
+Recovered messages:            0
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               10.34 ms
+P95 caption age:               2253.20 ms
+P99 caption age:               24089.58 ms
+Fresh Caption Ratio (<=500 ms): 94.65%
+Fresh Final Caption Ratio (<=500 ms): 90.00%
+Successful connections:        100
+Connection errors:             0
+Unique final captions:         7230/7600
+Final-caption completeness:    95.13%
+Unique live revisions:         21700/22800
+Normal Update Coverage:        95.18%
+
+Slow-reader isolation
+---------------------
+Normal clients: P50=10.09 ms, P95=23.21 ms, Fresh=100.00% (20520 msgs)
+Slow clients:   P50=14745.02 ms, P95=28158.36 ms, Fresh=1.69% (1180 msgs)
+
+=== Run 3/3 ===
+Clients=100, duration=60.0s, source segments=76
+LiveRecall Results
+==================
+Clients observed:              100
+Live caption messages:         21700
+Recovered history items:       0
+Accepted messages:             21700
+Recovered messages:            0
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               10.75 ms
+P95 caption age:               2254.62 ms
+P99 caption age:               24089.44 ms
+Fresh Caption Ratio (<=500 ms): 94.65%
+Fresh Final Caption Ratio (<=500 ms): 90.00%
+Successful connections:        100
+Connection errors:             0
+Unique final captions:         7230/7600
+Final-caption completeness:    95.13%
+Unique live revisions:         21700/22800
+Normal Update Coverage:        95.18%
+
+Slow-reader isolation
+---------------------
+Normal clients: P50=10.41 ms, P95=24.49 ms, Fresh=100.00% (20520 msgs)
+Slow clients:   P50=14745.73 ms, P95=28160.74 ms, Fresh=1.69% (1180 msgs)
+
+=== Median across independent runs ===
+P50 caption age                    10.38 ms
+P95 caption age                  2254.62 ms
+P99 caption age                 24089.44 ms
+Fresh Caption Ratio                94.65 %
+Fresh Final Caption Ratio          90.00 %
+Final completeness                 95.13 %
+Normal Update Coverage             95.18 %
+Normal-client P95                  24.06 ms
+Slow-client P95                 28159.98 ms
+
+Public run complete. CSV and JSON result files were written beside run_demo.py.
