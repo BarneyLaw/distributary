@@ -13,7 +13,7 @@ import (
 type client struct {
 	hub      *hub
 	conn     *websocket.Conn
-	hello    protocol.ClientHello
+	hello    *protocol.ClientHello
 	sentSeq  uint64
 	ackedSeq uint64
 
@@ -75,7 +75,7 @@ func (c *client) writePump(wg *sync.WaitGroup, ctx context.Context) {
 		wg.Done()
 	}()
 
-	history, cursor := c.hub.sess.Join(&c.hello)
+	history, cursor := c.hub.sess.Join(c.hello)
 
 	if errHistory := c.write(history, ctx, keepAliveCtx); errHistory != nil {
 		return

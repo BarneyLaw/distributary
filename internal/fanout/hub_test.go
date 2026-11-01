@@ -71,8 +71,8 @@ func newTestSession() *session.Session {
 }
 
 // Implemented with Codex
-func newTestClientHello() protocol.ClientHello {
-	return protocol.ClientHello{
+func newTestClientHello() *protocol.ClientHello {
+	return &protocol.ClientHello{
 		Type:           protocol.TypeClientHello,
 		ClientID:       1,
 		Session:        "test-session",
@@ -81,7 +81,7 @@ func newTestClientHello() protocol.ClientHello {
 }
 
 // Implemented with Codex
-func addClientAsync(h *hub, conn *websocket.Conn, hello protocol.ClientHello) <-chan error {
+func addClientAsync(h *hub, conn *websocket.Conn, hello *protocol.ClientHello) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		done <- h.AddClient(conn, hello)
