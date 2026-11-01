@@ -39,8 +39,14 @@ func (s *Session) Pick(cur *Cursor, max int, provisionals bool) (frames [][]byte
 		return nil, wake, false
 	}
 
-	if cur.finalSeq+1 < s.finals.oldestSeq() && s.floor > cur.minSegment {
-		return nil, wake, true
+	if cur.finalSeq+1 < s.finals.oldestSeq() {
+		// Finals this cursor has not been given were evicted.
+		if s.floor > cur.minSegment {
+			return nil, wake, true // it needed at least one of them
+		}
+		// Every evicted final is at or below the client's last_segment, so it
+		// already has them: skip past them, or get() below would return nil.
+		cur.finalSeq = s.finals.oldestSeq() - 1
 	}
 
 	for cur.finalSeq < s.finals.newestSeq() && len(frames) < max {

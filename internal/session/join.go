@@ -20,12 +20,6 @@ import "github.com/BarneyLaw/distributary/internal/protocol"
 // already hold that provisional, and sending it again would be a duplicate.
 // The client picks the segment up from its next revision or its final.
 func (s *Session) Join(h *protocol.ClientHello) (history []byte, cur Cursor) {
-	// TODO(session): step 2. Under s.mu.RLock:
-	//   - walk fseq from s.finals.oldestSeq() to s.finals.newestSeq(),
-	//     collecting c.frame for finals that pass both filters above
-	//   - cursor: finalSeq = s.finals.newestSeq(), minSegment = h.LastSegment,
-	//     sentRev = the current revision of every segment in s.active
-	//   - return protocol.EncodeHistory(frames), cursor
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
