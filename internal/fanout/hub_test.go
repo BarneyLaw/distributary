@@ -130,8 +130,11 @@ func TestNewHubInitializesUsableDefaults(t *testing.T) {
 	if h.controlTimeout != 5*time.Second {
 		t.Fatalf("controlTimeout = %v, want %v", h.controlTimeout, 5*time.Second)
 	}
-	if h.queueDelayTreshold != 30*time.Millisecond {
-		t.Fatalf("queueDelayTreshold = %v, want %v", h.queueDelayTreshold, 30*time.Millisecond)
+	if h.queueDelayTreshold != 250*time.Millisecond {
+		t.Fatalf("queueDelayTreshold = %v, want %v", h.queueDelayTreshold, 250*time.Millisecond)
+	}
+	if h.resetDelay != 3*time.Second {
+		t.Fatalf("resetDelay = %v, want %v", h.resetDelay, 3*time.Second)
 	}
 	if h.modeThreshold != 2 {
 		t.Fatalf("modeThreshold = %v, want %v", h.modeThreshold, 2)

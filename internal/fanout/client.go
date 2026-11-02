@@ -3,6 +3,7 @@ package fanout
 import (
 	"context"
 	"errors"
+	"net"
 	"sync"
 	"time"
 
@@ -113,6 +114,16 @@ func (c *client) readPump(wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 			c.computeSRTT(0.125)
 			c.computeQueueDelay()
 			c.determineStatus()
+			// A pong this late means the client's library has stopped reading:
+			// it holds seconds of stale frames. Reset the connection (RST drops
+			// the backlog in kernel buffers); the client reconnects and gets
+			// every missed final in one HISTORY message.
+			if c.sampleRTT-c.minRTT > c.hub.resetDelay {
+				if tcp, ok := c.conn.UnderlyingConn().(*net.TCPConn); ok {
+					_ = tcp.SetLinger(0)
+				}
+				c.conn.Close()
+			}
 			c.ackedSeq = ack
 			wakeWriter := c.acked
 			c.acked = make(chan struct{})
