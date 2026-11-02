@@ -1,0 +1,106 @@
+Starting 100 clients; slow=10, disconnecting=0, late=0
+Results written to /home/ubuntu/shared/distributary/experiments/results/runs/20261102-092141_live_t3/t3_run01.csv
+SOURCE_DONE: emitted 76 finalized segments
+Starting 100 clients; slow=10, disconnecting=0, late=0
+Results written to /home/ubuntu/shared/distributary/experiments/results/runs/20261102-092141_live_t3/t3_run02.csv
+SOURCE_DONE: emitted 76 finalized segments
+Starting 100 clients; slow=10, disconnecting=0, late=0
+Results written to /home/ubuntu/shared/distributary/experiments/results/runs/20261102-092141_live_t3/t3_run03.csv
+SOURCE_DONE: emitted 76 finalized segments
+
+=== Run 1/3 ===
+Clients=100, duration=60.0s, source segments=76
+LiveRecall Results
+==================
+Clients observed:              100
+Live caption messages:         18370
+Recovered history items:       0
+Accepted messages:             18370
+Recovered messages:            0
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               10.51 ms
+P95 caption age:               4107.39 ms
+P99 caption age:               8991.16 ms
+Fresh Caption Ratio (<=500 ms): 94.18%
+Fresh Final Caption Ratio (<=500 ms): 75.79%
+Successful connections:        100
+Connection errors:             0
+Unique final captions:         6310/7600
+Final-caption completeness:    83.03%
+Unique live revisions:         18370/22800
+Normal Update Coverage:        80.57%
+
+Slow-reader isolation
+---------------------
+Normal clients: P50=10.20 ms, P95=19.66 ms, Fresh=100.00% (17280 msgs)
+Slow clients:   P50=7967.00 ms, P95=9522.32 ms, Fresh=1.83% (1090 msgs)
+
+=== Run 2/3 ===
+Clients=100, duration=60.0s, source segments=76
+LiveRecall Results
+==================
+Clients observed:              100
+Live caption messages:         18370
+Recovered history items:       0
+Accepted messages:             18370
+Recovered messages:            0
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               10.26 ms
+P95 caption age:               3874.68 ms
+P99 caption age:               9368.15 ms
+Fresh Caption Ratio (<=500 ms): 94.18%
+Fresh Final Caption Ratio (<=500 ms): 75.79%
+Successful connections:        100
+Connection errors:             0
+Unique final captions:         6310/7600
+Final-caption completeness:    83.03%
+Unique live revisions:         18370/22800
+Normal Update Coverage:        80.57%
+
+Slow-reader isolation
+---------------------
+Normal clients: P50=9.92 ms, P95=21.79 ms, Fresh=100.00% (17280 msgs)
+Slow clients:   P50=8303.33 ms, P95=9759.65 ms, Fresh=1.83% (1090 msgs)
+
+=== Run 3/3 ===
+Clients=100, duration=60.0s, source segments=76
+LiveRecall Results
+==================
+Clients observed:              100
+Live caption messages:         18270
+Recovered history items:       0
+Accepted messages:             18270
+Recovered messages:            0
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               10.69 ms
+P95 caption age:               4005.75 ms
+P99 caption age:               8959.73 ms
+Fresh Caption Ratio (<=500 ms): 94.20%
+Fresh Final Caption Ratio (<=500 ms): 74.61%
+Successful connections:        100
+Connection errors:             0
+Unique final captions:         6200/7600
+Final-caption completeness:    81.58%
+Unique live revisions:         18270/22800
+Normal Update Coverage:        80.13%
+
+Slow-reader isolation
+---------------------
+Normal clients: P50=10.39 ms, P95=19.11 ms, Fresh=100.00% (17190 msgs)
+Slow clients:   P50=7833.38 ms, P95=9511.93 ms, Fresh=1.85% (1080 msgs)
+
+=== Median across independent runs ===
+P50 caption age                    10.51 ms
+P95 caption age                  4005.75 ms
+P99 caption age                  8991.16 ms
+Fresh Caption Ratio                94.18 %
+Fresh Final Caption Ratio          75.79 %
+Final completeness                 83.03 %
+Normal Update Coverage             80.57 %
+Normal-client P95                  19.66 ms
+Slow-client P95                  9522.32 ms
+
+Public run complete. CSV and JSON result files were written beside run_demo.py.
