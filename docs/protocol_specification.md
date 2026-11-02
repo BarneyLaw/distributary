@@ -214,4 +214,6 @@ A value returned **without error** already satisfies these.
 - Round-trip tests check that `Encode` output decodes back to the same values, and that it matches the spec's example byte for byte.
 - Compatibility tests decode the exact JSON that the harness's `caption_source.py` and `load_clients.py` send, and check that `Encode` and `EncodeHistory` output parses the way the harness reads it.
 - `FuzzDecode` feeds random input to both decoders and checks they never panic, only return the errors above, and that accepted values meet the guarantees in section 5.
-
+- **Table tests.** Add a row rather than a new test function when the new case checks an existing rule.
+- **`compat_test.go` holds byte-for-byte Python `json.dumps` output** (spaces after `:` and `,`, `\u` escapes). If the harness's message format ever changes, update these strings first.
+- **Fuzz failures.** When fuzzing finds a failing input, Go saves it under `internal/protocol/testdata/fuzz/FuzzDecode/`. Fix the bug, then commit that file: plain `go test` then reruns it forever as a regression test.
