@@ -114,6 +114,14 @@ export function createCaptionStore({ url, session, storage = browserSessionStora
     return { last_segment: lastFinalSegment, last_revision: lastFinalRevision };
   }
 
+  // Remove only this stream's saved state, leaving other sessions untouched.
+  function clear() {
+    storage?.removeItem(storageKey);
+    segments.clear();
+    lastFinalSegment = 0;
+    lastFinalRevision = 0;
+  }
+
   // Include provisional captions so the current line can return immediately on reload.
   function getCaptions() {
     purgeExpired();
@@ -141,5 +149,5 @@ export function createCaptionStore({ url, session, storage = browserSessionStora
   // Rewrite the snapshot after restoration to remove expired or invalid saved data.
   persist();
 
-  return { acceptUpdate, purgeExpired, getHistory, getResumePosition, getCaptions };
+  return { acceptUpdate, purgeExpired, getHistory, getResumePosition, getCaptions, clear };
 }

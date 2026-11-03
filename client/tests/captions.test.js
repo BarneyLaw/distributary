@@ -7,6 +7,7 @@ function memoryStorage() {
   return {
     getItem: key => entries.get(key) ?? null,
     setItem: (key, value) => entries.set(key, value),
+    removeItem: key => entries.delete(key),
     entries
   };
 }
@@ -141,4 +142,23 @@ test("a blocked sessionStorage getter does not prevent store initialization", t 
   const store = createCaptionStore({ url: f.options.url, session: f.options.session });
   assert.ok(store.acceptUpdate(f.caption(1)));
   assert.equal(store.getCaptions().length, 1);
+});
+
+test("clearing a session removes its saved captions and cursor without clearing other data", t => {
+  const f = fixture(t);
+  const store = f.reload();
+  store.acceptUpdate(f.caption(4, { revision: 3 }));
+  const otherSession = createCaptionStore({ ...f.options, session: "L2" });
+  otherSession.acceptUpdate(f.caption(7, { session: "L2" }));
+  f.storage.setItem("unrelated-preference", "keep");
+
+  store.clear();
+  assert.deepEqual(store.getCaptions(), []);
+  assert.deepEqual(store.getResumePosition(), { last_segment: 0, last_revision: 0 });
+  assert.equal(f.storage.entries.size, 2);
+  assert.equal(f.storage.getItem("unrelated-preference"), "keep");
+  const fresh = f.reload();
+  assert.deepEqual(fresh.getCaptions(), []);
+  assert.deepEqual(fresh.getResumePosition(), { last_segment: 0, last_revision: 0 });
+  assert.equal(createCaptionStore({ ...f.options, session: "L2" }).getCaptions().length, 1);
 });

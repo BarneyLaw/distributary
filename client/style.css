@@ -45,10 +45,38 @@ body {
 }
 
 #client-id {
-  margin-inline-start: auto;
   color: #475569;
   background: #f1f5f9;
   font-variant-numeric: tabular-nums;
+}
+
+#client-controls {
+  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+#refresh-client-session {
+  padding: .35rem .75rem;
+  border: 1px solid #dfe5ee;
+  border-radius: 999px;
+  color: #475569;
+  background: #fff;
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+#refresh-client-session:hover { background: #f1f5f9; }
+
+#refresh-client-session:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
 }
 
 #status::before {

@@ -51,3 +51,20 @@ test("unavailable storage still allows hello and a stable ID on reconnect", asyn
   assert.equal(hello().client_id, first.client_id);
   assert.equal(first.client_id, 550000);
 });
+
+test("resetting the client ID persists a different ID even when random returns the old value", async t => {
+  let savedId = "550000";
+  stubGlobal(t, "sessionStorage", {
+    getItem: () => savedId,
+    setItem: (key, value) => { savedId = value; }
+  });
+  t.mock.method(Math, "random", () => 0.5);
+  const { getClientId, resetClientId } = await import("../connection.js?reset");
+  const previousId = getClientId();
+  const nextId = resetClientId();
+  assert.notEqual(nextId, previousId);
+  assert.equal(getClientId(), nextId);
+  assert.equal(Number(savedId), nextId);
+  const afterReload = await import("../connection.js?after-reset");
+  assert.equal(afterReload.getClientId(), nextId);
+});
