@@ -82,7 +82,7 @@ export function createUI({ getHistory, clientId }) {
   // Take a fresh snapshot only when opening, refreshing or changing the window
   function takeSnapshot(){
     snapshotTime = Date.now() / 1000;
-    const history = getHistory(recallSeconds);
+    const history = getHistory(recallSeconds).reverse();
     snapshotKeys = new Set(history.map(caption => JSON.stringify([caption.session, caption.segment])));
     recallSummary.textContent = `Previous ${recallSeconds} seconds · captured at ${localTime.format(new Date(snapshotTime * 1000))}`;
     recallEl.replaceChildren();

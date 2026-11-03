@@ -2,8 +2,9 @@ import { createCaptionStore } from "./captions.js";
 import { connect, getClientId } from "./connection.js";
 import { createUI } from "./ui.js";
 import { createTestingTools } from "./testing-tools.js";
+import { getWebSocketUrl } from "./config.js";
 
-const url = "ws://127.0.0.1:8765";
+const url = getWebSocketUrl();
 const session = "L1";
 const captions = createCaptionStore({ url, session });
 const ui = createUI({ getHistory: captions.getHistory, clientId: getClientId() });

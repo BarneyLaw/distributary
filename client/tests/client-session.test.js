@@ -70,7 +70,7 @@ function createDocument() {
   };
 }
 
-test("a confirmed client reset boots an empty client, sends a new HELLO, and recalls incoming history", async t => {
+async function checkClientReset(t, { protocol, host, search = "", socketUrl }) {
   t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
   for (const name of ["document", "window", "sessionStorage", "WebSocket"]) {
     const original = Object.getOwnPropertyDescriptor(globalThis, name);
@@ -91,7 +91,7 @@ test("a confirmed client reset boots an empty client, sends a new HELLO, and rec
     listeners = new Map();
     sent = [];
     closed = false;
-    constructor() { sockets.push(this); }
+    constructor(url) { this.url = url; sockets.push(this); }
     addEventListener(name, callback) { this.listeners.set(name, callback); }
     emit(name, event) { this.listeners.get(name)?.(event); }
     send(raw) { this.sent.push(JSON.parse(raw)); }
@@ -100,7 +100,7 @@ test("a confirmed client reset boots an empty client, sends a new HELLO, and rec
   let reloads = 0;
   globalThis.window = {
     confirm: () => true,
-    location: { reload() { reloads++; } },
+    location: { protocol, host, href: `${protocol}//${host}/index.html${search}`, reload() { reloads++; } },
     getComputedStyle: () => ({ opacity: "1" }),
     alert(message) { assert.fail(message); }
   };
@@ -111,7 +111,9 @@ test("a confirmed client reset boots an empty client, sends a new HELLO, and rec
   const deliver = (socket, message) => socket.emit("message", { data: JSON.stringify(message) });
   let page = createDocument();
   globalThis.document = page.document;
-  await import("../app.js?before-full-reset");
+  const importKey = encodeURIComponent(window.location.href);
+  await import(`../app.js?before-full-reset-${importKey}`);
+  assert.equal(sockets[0].url, socketUrl);
   sockets[0].emit("open");
   const originalId = sockets[0].sent[0].client_id;
   deliver(sockets[0], caption(50));
@@ -133,7 +135,8 @@ test("a confirmed client reset boots an empty client, sends a new HELLO, and rec
   // A reload runs the entry point again with new DOM and new caption/UI stores.
   page = createDocument();
   globalThis.document = page.document;
-  await import("../app.js?after-full-reset");
+  await import(`../app.js?after-full-reset-${importKey}`);
+  assert.equal(sockets[1].url, socketUrl);
   sockets[1].emit("open");
   const hello = sockets[1].sent[0];
   assert.notEqual(hello.client_id, originalId);
@@ -156,9 +159,21 @@ test("a confirmed client reset boots an empty client, sends a new HELLO, and rec
       caption(4, { final: false })]
   });
   page.get("recall-toggle").click();
-  assert.deepEqual(page.recallTexts(), ["Caption 2", "Caption 3"]);
+  assert.deepEqual(page.recallTexts(), ["Caption 3", "Caption 2"]);
   deliver(sockets[1], caption(4));
   assert.equal(page.get("recall-new").textContent, "1 new caption available");
   page.get("recall-refresh").click();
-  assert.deepEqual(page.recallTexts(), ["Caption 2", "Caption 3", "Caption 4"]);
-});
+  assert.deepEqual(page.recallTexts(), ["Caption 4", "Caption 3", "Caption 2"]);
+}
+
+for (const endpoint of [
+  { protocol: "http:", host: "192.0.2.10:9123", socketUrl: "ws://192.0.2.10:9123" },
+  { protocol: "https:", host: "captions.example.test", socketUrl: "wss://captions.example.test" },
+  { protocol: "http:", host: "192.0.2.10:8000", search: "?serverPort=8765",
+    socketUrl: "ws://192.0.2.10:8765" },
+  { protocol: "https:", host: "frontend.example.test", search: "?server=wss://backend.example.test:9443/captions",
+    socketUrl: "wss://backend.example.test:9443/captions" }
+]) {
+  test(`client connects to ${endpoint.socketUrl} and resets caption/recall state`,
+    t => checkClientReset(t, endpoint));
+}
