@@ -18,7 +18,7 @@ sudo apt update
 sudo apt install -y python3 python3-venv python3-pip make iproute2
 ```
 
-See the [Ubuntu setup guide](docs/provided_docs/UBUNTU_SETUP.md) for VM setup and network test prerequisites.
+See the [Ubuntu setup guide](docs/developer_docs/UBUNTU_SETUP.md) for installation, verification, and first-run instructions.
 
 ## Install
 
@@ -60,7 +60,7 @@ python3 experiments/run/perf.py t1 t2 t3 t4 --runs 3
 python3 experiments/run/perf.py t5 --runs 3
 ```
 
-T5 requires sudo for the loopback network profile; the runner applies and resets it. Exact T1–T5 workloads are listed in [Public tests](docs/provided_docs/PUBLIC_TESTS.md).
+T5 requires sudo for the loopback network profile; the runner applies and resets it. Further test details will be documented in [Public tests](docs/developer_docs/PUBLIC_TESTS.md).
 
 ## Mandatory deterministic application demo
 
@@ -97,4 +97,4 @@ python3 harness/caption_source.py \
 
 - [Developer documentation](docs/developer_docs/): current implementation notes in the [Developer Guide](docs/developer_docs/DeveloperGuide.md) and [protocol specification](docs/developer_docs/protocol_specification.md).
 - [Initial development notes](docs/initial_development_docs_for_info/): early plans and reference material, some of which is outdated.
-- [Provided documentation](docs/provided_docs/): assignment setup, public tests, demo instructions, and submission templates.
+- [Provided templates](docs/provided_docs/): original assignment material retained for reference.
