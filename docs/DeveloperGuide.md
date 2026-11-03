@@ -77,19 +77,48 @@ Turns WebSocket bytes into checked Go structs and back. No I/O, no goroutines, n
 - Implement a naive independent client connections based on naive.go
 - Create an early documentation for fanout
 
-### Fanout
+### Fanout (`internal/fanout`)
 Fanout is a component that enforce one independent connection per-client and all of its policies.
 
 #### Hub
-Hub is the only gateway for other components to communicate with fanout. Hub is instantiated only through NewHub(). The following functions are usable by other components:<br>
-* NewHub(session *Session) *hub
+Hub is the only gateway for other components to communicate with fanout. **The hub struct is not exposed to other components**, a Hub interface is used instead. Hub is instantiated only through NewHub(). The following `fanout` functions are usable by other components:<br>
+* `NewHub(session *Session) *hub`
   - Instantiates a new hub that is dependent on the passed session.
   - All clients orchestrated by the returned hub will retrieve caption from the passed session.
   - The hub structure is not exported, thus all of its inner structure are non accessible from other components. This also prevents instantiation of hub outside of NewHub().
-* (h *hub) AddClient(connection *websocket.Conn) error
-  - Add a new client connection to hub.
+* `(h *hub) AddClient(connection *websocket.Conn) error`
+  - Adds a new client connection to hub.
   - Trying to add a client to a hub that has been shutted down will return an error.
-  - AddClient will not return unless there is an error or the client connection is terminated.
-* (h *hub) Shutdown()
-  - When executed, all connections orchestrated by hub will be terminated.
-  - After Shutdown(), the hub will no longer be usable. A NewHub() must be executed.
+  - AddClient is a blocking function. It will not return unless there is an error or the client connection is terminated.
+  - It is recommended to call AddClient as a go routine.
+* `(h *hub) Shutdown()`
+  - Shuts a hub down and terminates all connections orchestrated by the hub.
+  - After `Shutdown()`, the hub will no longer be usable. Another hub must be instantiated through `NewHub()`.
+  - This function wraps `helperShutdown` inside a `sync.Once` to ensure that multiple concurrent calls to `Shutdown()` will yield in only one execution.
+Hub also holds all parameters used for enforcing client connection policy. The details can be observed in hub's `struct` definition.
+
+#### Client
+Client is responsible to handle independent per-client connection. Every instance of `client` handles the connection and enforces policies independently from other instances. `client` is not exposed to other component to reduce coupling. `client`'s `struct` holds statistics necessary to decide how to enforce the connection policies based on the parameters given in `hub`'s `struct`. Below are useful `client`'s method that are important to understand how `client` works:
+* `(c *client) readPump(wg *sync.WaitGroup, ctxCancel context.CancelFunc)`
+  - Acts as a sole reader from the websocket connection. It ensures independence between reading and writing task to prevent concurrency problems.
+  - The function main responsibility is to handle pong frame. There are 2 types of pong: keep alive pong and acknowledgement pong. For each acknowledgement pong read, the function will compute statistics to determine the status of a client (normal or degraded). Each client status carries its own policies.
+  - Helper functions used to compute statisics and to determine client's status are `(c *client) computeSRTT(alpha float64)`, `(c *client) computeMinRTT()`, `(c *client) computeQueueDelay()`, `(c *client) determineStatus()`.
+  - This function must be run inside a go routines.
+* `(c *client) writePump(wg *sync.WaitGroup, ctx context.Context)` 
+  - Acts as a sole writer to the websocket connection.
+  - The function responsibilities are to retrieve captions from `Session` through `hub` and to send captions to client based on policies tied to client's status.
+  - Helper functions used is `(c *client) write(caption []byte, writerCtx context.Context) error`. The writing process is separated from `writePump()` mainly to improve readibility.
+  - This function must be run inside a go routines.
+* `(c *client) write(caption []byte, writerCtx context.Context) error`
+  - Executes the writing to the websocket connection when called by `writePump()`.
+  - Helper functions used is `(c *client) startPingingMode(num uint64, writerCtx context.Context, acked chan struct{}) error`. Pinging mode is when the server sends acknowledgement ping to the client. For normal client, it is sent every `hub.maxInFlight` sequences. For slow client, it is sent for every sequence.
+* `(c *client) startPingingMode(num uint64, writerCtx context.Context, acked chan struct{})`
+  - Sends acknowledgement ping to the client.
+  - This function will wait for `readPump()` to notify that and acknowledgement pong has been received from the client.
+  - If no notification from `readPump()` for `hub.pongTimeout` time, the function will return an error. The error will be propagated to `writePump()` which will trigger connection termination.
+**Client connection policies based on its status:**
+  1. A new client will be given the available caption history as stored by `Session` before anything else.
+  2. A normal client will be given either provisional or final new captions as retrieved from `Session`.
+  3. A slow/degraded client will be given only final captions until it recovers.
+  4. If client is too slow, it will be disconnected.
+  5. If client asked for captions beyond `Session`'s retained history, it will be disconnected.
