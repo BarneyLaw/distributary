@@ -1,12 +1,27 @@
-// Creates a session "cookie" that contains the current client ID 
+let clientId;
+
+// Keep one client ID per tab, including across reloads and reconnects.
 function numericClientId() {
-  const key = "liverecall-client-id";
-  let value = sessionStorage.getItem(key);
-  if (!value) {
-    value = String(Math.floor(100000 + Math.random() * 900000));
-    sessionStorage.setItem(key, value);
+  if (clientId !== undefined) {
+    return clientId;
   }
-  return Number(value);
+  const key = "liverecall-client-id";
+  try {
+    const value = Number(sessionStorage.getItem(key));
+    if (Number.isSafeInteger(value) && value > 0) {
+      clientId = value;
+      return clientId;
+    }
+  } catch {
+    // Retain an in-memory ID when browser storage is unavailable.
+  }
+  clientId = Math.floor(100000 + Math.random() * 900000);
+  try {
+    sessionStorage.setItem(key, String(clientId));
+  } catch {
+    // Live captions can continue without persistence.
+  }
+  return clientId;
 }
 
 // Generate hello message
@@ -15,7 +30,7 @@ function getHelloMsg(session, last_segment, last_revision, history_seconds){
     type: "CLIENT_HELLO",
     client_id: numericClientId(),
     session,
-    last_segment: last_segment, // TODO: resume latest finalized state.
+    last_segment: last_segment,
     last_revision: last_revision,
     history_seconds: history_seconds
   })
