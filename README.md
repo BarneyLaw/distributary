@@ -5,7 +5,7 @@
 - Ooi Zheng Hao / A0308283A / Frontend Client
 - Achmad Firdaus Assabil / XXXXX / XXXXX
 - William Jeffery Liow / XXXXX / XXXXX
-- Leifsen Law / XXXXX / XXXXX
+- Leifsen Law / A0307362J / Session, Source and Routing
 
 ## Ubuntu setup
 
