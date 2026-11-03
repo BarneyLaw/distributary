@@ -50,6 +50,16 @@ Single entry point for every connection: upgrade, read the hello within 5 s, dis
 - Improved UI styling with a gradient background, panel heading, and footer.
 - Added the LR logo, favicon, and basic site metadata.
 
+### 03/11
+- Added per-tab `sessionStorage` persistence for captions and the finalized resume position, restoring recent captions on refresh while maintaining the 60-second purge window.
+- Added a client ID pill to the live caption header to identify the current client session.
+- Added a testing taskbar above the footer and moved testing controls into `testing-tools.js`.
+- Added a client session refresh button with confirmation, clearing saved LiveRecall state, resetting UI defaults, and reconnecting with a new client ID and zeroed resume position.
+- Added temporary disconnection simulation with a configurable duration, automatically reconnecting with the same client ID and resume position.
+- Changed the "What did I miss?" caption list to show the latest captions first.
+- Added dynamic WebSocket endpoint configuration in `config.js`, using the page's host and port by default, with `serverPort` and `server` URL parameters for separate backend deployments and support for `ws`/`wss`.
+- Added `demo_transcript.txt` with a longer transcript to better simulate conversational captions.
+
 
 ## William
 ### 25/10

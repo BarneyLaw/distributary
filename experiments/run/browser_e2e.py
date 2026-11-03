@@ -4,8 +4,8 @@
 What it does (about 45 s):
 
   1. Starts our server on port 8766 (python solution_server.py --mode live).
-  2. Starts a TCP proxy on 8765 -> 8766. The browser client is hard-coded to
-     ws://127.0.0.1:8765, so all browser traffic goes through the proxy, and
+  2. Starts a TCP proxy on 8765 -> 8766. The browser client connects to its
+     page's host and port, so all browser traffic goes through the proxy, and
      the test can cut it to simulate a network outage.
   3. Opens browser pages A and B at http://127.0.0.1:8765/ (the server serves
      client/ itself), and starts caption_source.py --duration 30 (straight to
@@ -22,7 +22,7 @@ Checks, from the WebSocket frames each page received:
   - A and B received a non-empty HISTORY after reconnecting
 and from the page itself:
   - the status shows "connected"
-  - "What did I miss?" at 60 s lists every final, in transcript order
+  - "What did I miss?" at 60 s lists every final, newest first
 
 Requirements: pip install playwright && python -m playwright install chromium
 Run from the repo root, after `make build`:  python3 experiments/run/browser_e2e.py
@@ -43,7 +43,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
-BROWSER_PORT = 8765  # client/app.js connects here
+BROWSER_PORT = 8765  # page and WebSocket traffic enter through this proxy
 SERVER_PORT = 8766
 
 
@@ -179,10 +179,10 @@ def check_page(name: str, page, sentences: list[str], last_segment: int) -> list
     page.click("#recall-toggle")
     page.click("button[data-seconds='60']")
     texts = page.locator("#recall .recall-text").all_text_contents()
-    want = [sentences[(seg - 1) % len(sentences)] for seg in range(1, last_segment + 1)]
+    want = [sentences[(seg - 1) % len(sentences)] for seg in range(last_segment, 0, -1)]
     if texts != want:
         problems.append(f"{name}: 'What did I miss?' 60 s shows {len(texts)} captions, "
-                        f"want all {last_segment} in transcript order")
+                        f"want all {last_segment}, newest first")
     return problems
 
 
