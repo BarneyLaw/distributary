@@ -17,7 +17,7 @@ Go is needed to build the backend and run Go tests. The browser client uses plai
 ## Install Ubuntu packages
 
 ```bash
-sudo apt update
+sudo apt update && sudo apt upgrade -y
 sudo apt install -y \
   git curl ca-certificates build-essential \
   python3 python3-venv python3-pip \
@@ -61,7 +61,7 @@ printf '\nexport PATH="$HOME/.local/lib/go-1.27.3/go/bin:$PATH"\n' >> "$HOME/.ba
 
 ## Prepare the project
 
-Clone or extract the repository, then open a terminal in its root directory, which contains `solution_server.py`, `go.mod`, and `requirements.txt`. Run the remaining project commands from this directory.
+Clone or extract the repository, then open a terminal in its root directory, which contains `solution_server.py`, `go.mod`, and `requirements.txt`. Run the remaining project commands from this root directory.
 
 Create and activate a Python virtual environment:
 

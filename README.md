@@ -36,7 +36,7 @@ Activate the virtual environment in each terminal used for Python commands. Run 
 ## Required server
 
 ```bash
-python3 solution_server.py --host 127.0.0.1 --port 8765
+python3 solution_server.py --host 127.0.0.1 --port 8765 --mode live
 ```
 
 Live mode is the default. The server accepts caption sources and browser clients over WebSocket, and serves the browser files over HTTP on the same port. To connect from other devices, bind to `0.0.0.0` and use the server's IP address in the browser.
@@ -82,7 +82,7 @@ python3 harness/caption_source.py \
 5. Use **Refresh client session** and confirm to clear saved client state and reconnect with a new ID and zeroed resume position.
 
 
-> For a new test run, **restart the server**, then refresh the client session. 
+> For a new test run, **restart the server**, then hard reset the client session. 
 
 ## Design notes
 

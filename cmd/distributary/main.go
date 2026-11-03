@@ -36,7 +36,7 @@ func main() {
 	// for public-test runs (DISTRIBUTARY_MODE=naive make t3). The evaluator
 	// never sets it, so the fallback below is what gets graded: switch it to
 	// "live" once live passes T1 and T4.
-	mode := flag.String("mode", envOr("DISTRIBUTARY_MODE", "naive"), "server implementation: naive or live")
+	mode := flag.String("mode", envOr("DISTRIBUTARY_MODE", "live"), "server implementation: naive or live, default is live")
 	clientDir := flag.String("client-dir", "", "browser client files to serve on plain HTTP (default: client/ next to bin/)")
 	mss := flag.Int("mss", 1400, "TCP max segment size for accepted connections; 0 leaves the OS default")
 	statsEvery := flag.Duration("stats", 10*time.Second, "how often to log source counters; 0 disables")
