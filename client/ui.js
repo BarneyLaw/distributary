@@ -1,17 +1,7 @@
 // DOM rendering and user interactions; caption acceptance belongs to the store.
-export function createUI({ getHistory, clientId, onRefreshClientSession }) {
+export function createUI({ getHistory, clientId }) {
   const statusEl = document.getElementById("status");
   document.getElementById("client-id").textContent = `Client ID: ${clientId}`;
-  document.getElementById("refresh-client-session").addEventListener("click", () => {
-    const confirmed = window.confirm(
-      "Refresh client session?\n\n" +
-      "This will remove ALL captions saved for the current session in this tab!" +
-      "and restart it with a new client ID. This cannot be undone."
-    );
-    if (confirmed) {
-      onRefreshClientSession();
-    }
-  });
   const liveEl = document.getElementById("live");
   const historyEl = document.getElementById("live-history");
   const currentEl = document.getElementById("live-current");

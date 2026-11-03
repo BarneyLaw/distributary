@@ -14,15 +14,17 @@ function stubGlobal(t, name, value) {
 }
 
 async function helloFixture(t, storage, name) {
+  let ws;
   stubGlobal(t, "sessionStorage", storage);
   stubGlobal(t, "WebSocket", class {
+    constructor() { ws = this; }
     listeners = new Map();
     addEventListener(name, callback) { this.listeners.set(name, callback); }
     send(raw) { this.hello = JSON.parse(raw); }
   });
   const { connect } = await import(`../connection.js?${name}`);
   return () => {
-    const ws = connect({
+    connect({
       url: "ws://localhost:8765", session: "L1", onStatus() {}, onMessage() {},
       getResumePosition: () => ({ last_segment: 4, last_revision: 3 })
     });
@@ -40,6 +42,92 @@ test("hello reuses the saved tab ID and sends the restored resume position", asy
     type: "CLIENT_HELLO", client_id: 123456, session: "L1",
     last_segment: 4, last_revision: 3, history_seconds: 60
   });
+});
+
+async function connectionFixture(t, name) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const sockets = [];
+  const statuses = [];
+  const messages = [];
+  const position = { last_segment: 4, last_revision: 3 };
+  stubGlobal(t, "sessionStorage", { getItem: () => "123456" });
+  stubGlobal(t, "WebSocket", class {
+    listeners = new Map();
+    sent = [];
+    closed = false;
+    constructor() { sockets.push(this); }
+    addEventListener(name, callback) { this.listeners.set(name, callback); }
+    send(raw) { this.sent.push(JSON.parse(raw)); }
+    emit(name, event) { this.listeners.get(name)?.(event); }
+    close() { this.closed = true; this.emit("close"); }
+  });
+  const { connect } = await import(`../connection.js?${name}`);
+  const connection = connect({
+    url: "ws://localhost:8765", session: "L1",
+    getResumePosition: () => position,
+    onMessage: msg => messages.push(msg),
+    onStatus: status => statuses.push(status)
+  });
+  t.after(() => connection.disconnect());
+  return { connection, sockets, statuses, messages, position };
+}
+
+test("disconnect suppresses stale events and reconnect sends the same ID and latest cursor", async t => {
+  const f = await connectionFixture(t, "manual-reconnect");
+  const original = f.sockets[0];
+  original.emit("open");
+  assert.equal(original.sent[0].client_id, 123456);
+  f.connection.disconnect();
+  assert.equal(original.closed, true);
+  assert.equal(f.statuses.at(-1), "disconnected");
+
+  // A late event from the retired socket cannot change state or start a retry.
+  original.emit("message", { data: '{"type":"CAPTION_UPDATE"}' });
+  original.emit("open");
+  original.emit("error");
+  original.emit("close");
+  assert.deepEqual(f.messages, []);
+  assert.equal(f.statuses.at(-1), "disconnected");
+  assert.equal(original.sent.length, 1);
+  t.mock.timers.tick(5000);
+  assert.equal(f.sockets.length, 1);
+  f.position.last_segment = 6;
+  f.connection.reconnect();
+  f.connection.reconnect();
+  assert.equal(f.sockets.length, 2);
+  f.sockets[1].emit("open");
+  assert.deepEqual(f.sockets[1].sent[0], {
+    type: "CLIENT_HELLO", client_id: 123456, session: "L1",
+    last_segment: 6, last_revision: 3, history_seconds: 60
+  });
+  f.sockets[1].emit("message", { data: '{"type":"HISTORY","items":[]}' });
+  assert.deepEqual(f.messages, [{ type: "HISTORY", items: [] }]);
+});
+
+test("disconnect cancels a pending automatic retry and reconnect restores normal retries", async t => {
+  const f = await connectionFixture(t, "pending-retry");
+  f.sockets[0].emit("open");
+  f.sockets[0].emit("close");
+  t.mock.timers.tick(500);
+  f.connection.disconnect();
+  t.mock.timers.tick(3000);
+  assert.equal(f.sockets.length, 1);
+  f.connection.reconnect();
+  assert.equal(f.sockets.length, 2);
+  f.sockets[1].emit("close");
+  t.mock.timers.tick(999);
+  assert.equal(f.sockets.length, 2);
+  t.mock.timers.tick(1);
+  assert.equal(f.sockets.length, 3);
+});
+
+test("disconnect can interrupt a connecting socket without scheduling a retry", async t => {
+  const f = await connectionFixture(t, "connecting-outage");
+  f.connection.disconnect();
+  assert.equal(f.sockets[0].closed, true);
+  f.connection.disconnect();
+  t.mock.timers.tick(5000);
+  assert.equal(f.sockets.length, 1);
 });
 
 test("unavailable storage still allows hello and a stable ID on reconnect", async t => {

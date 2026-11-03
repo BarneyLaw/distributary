@@ -57,33 +57,68 @@ function getHelloMsg(session, last_segment, last_revision, history_seconds){
 
 // Report messages and status changes without knowing how the UI uses them.
 export function connect({ url, session, onMessage, onStatus, getResumePosition }) {
-  onStatus("connecting");
-  const ws = new WebSocket(url);
+  let ws = null;
+  let reconnectTimer = null;
+  let stopped = false;
 
-  // Web Socket opens - Send Initial Hello Message 
-  ws.addEventListener("open", () => {
-    onStatus("connected");
-    const { last_segment, last_revision } = getResumePosition();
-    ws.send(getHelloMsg(session, last_segment, last_revision, 60));
-  });
+  function openSocket() {
+    if (stopped) {
+      return;
+    }
+    onStatus("connecting");
+    const socket = new WebSocket(url);
+    ws = socket;
+    const isCurrent = () => ws === socket && !stopped;
 
-  // Web socket receives incoming message - Pass to handler
-  ws.addEventListener("message", (event) => {
-    onMessage(JSON.parse(event.data));
-  });
+    socket.addEventListener("open", () => {
+      if (!isCurrent()) return;
+      onStatus("connected");
+      const { last_segment, last_revision } = getResumePosition();
+      socket.send(getHelloMsg(session, last_segment, last_revision, 60));
+    });
 
-  // Websocket connection closed - Attempt autoreconnect sequence (with last segment and revision HELLO)
-  ws.addEventListener("close", () => {
+    socket.addEventListener("message", (event) => {
+      if (isCurrent()) {
+        onMessage(JSON.parse(event.data));
+      }
+    });
+
+    socket.addEventListener("close", () => {
+      if (!isCurrent()) return;
+      ws = null;
+      onStatus("disconnected");
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        openSocket();
+      }, 1000);
+    });
+
+    socket.addEventListener("error", () => {
+      if (isCurrent()) onStatus("connection error");
+    });
+  }
+
+  function closeSocket() {
+    const socket = ws;
+    // Ignore queued events from this socket, including its close-triggered retry.
+    ws = null;
+    socket?.close();
+  }
+
+  function reconnect() {
+    if (!stopped) return;
+    stopped = false;
+    openSocket();
+  }
+
+  function disconnect() {
+    stopped = true;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    closeSocket();
     onStatus("disconnected");
-    setTimeout(() => {
-      connect({ url, session, onMessage, onStatus, getResumePosition });
-    }, 1000);
-  });
+  }
 
-  // Websocket error - show connection error to user
-  ws.addEventListener("error", () => {
-    onStatus("connection error");
-  });
-
-  return ws;
+  openSocket();
+  return { reconnect, disconnect };
 }
