@@ -1,6 +1,7 @@
 // DOM rendering and user interactions; caption acceptance belongs to the store.
-export function createUI({ getHistory }) {
+export function createUI({ getHistory, clientId }) {
   const statusEl = document.getElementById("status");
+  document.getElementById("client-id").textContent = `Client ID: ${clientId}`;
   const liveEl = document.getElementById("live");
   const historyEl = document.getElementById("live-history");
   const currentEl = document.getElementById("live-current");
@@ -16,6 +17,13 @@ export function createUI({ getHistory }) {
   let recallSeconds = 30;
   let snapshotTime = 0;
   let snapshotKeys = new Set();
+  // Initialize explicitly because browsers can restore form and DOM state on reload.
+  recallContent.hidden = true;
+  recallToggle.setAttribute("aria-expanded", "false");
+  timeFormat.value = "relative";
+  for (const button of windowButtons) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.seconds) === recallSeconds));
+  }
   const localTime = new Intl.DateTimeFormat(undefined, {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
   });
@@ -74,7 +82,7 @@ export function createUI({ getHistory }) {
   // Take a fresh snapshot only when opening, refreshing or changing the window
   function takeSnapshot(){
     snapshotTime = Date.now() / 1000;
-    const history = getHistory(recallSeconds);
+    const history = getHistory(recallSeconds).reverse();
     snapshotKeys = new Set(history.map(caption => JSON.stringify([caption.session, caption.segment])));
     recallSummary.textContent = `Previous ${recallSeconds} seconds · captured at ${localTime.format(new Date(snapshotTime * 1000))}`;
     recallEl.replaceChildren();

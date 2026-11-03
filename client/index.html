@@ -23,6 +23,7 @@
       <header id="live-header">
         <h2 id="live-title">Live Caption</h2>
         <span id="status" data-status="disconnected">disconnected</span>
+        <span id="client-id" title="Client ID for this tab">Client ID: …</span>
       </header>
       <div id="live-history"></div>
       <div id="live-current" aria-live="polite" aria-atomic="true">
@@ -69,6 +70,20 @@
       </div>
     </aside>
   </main>
+  <section id="testing-taskbar" aria-labelledby="testing-tools-title">
+    <h2 id="testing-tools-title">Testing tools</h2>
+    <div class="taskbar-actions">
+      <button id="refresh-client-session" type="button">Refresh client session</button>
+      <form id="disconnect-form" class="taskbar-group">
+        <label for="disconnect-duration">Disconnect for
+          <input id="disconnect-duration" type="number" min="1" max="3600" step="1" value="5" required>
+          seconds
+        </label>
+        <button id="simulate-disconnection" type="submit">Simulate temporary disconnection</button>
+        <span id="disconnection-status" role="status" hidden></span>
+      </form>
+    </div>
+  </section>
   <footer id="site-footer">by Distributary</footer>
   <script type="module" src="app.js"></script>
 </body>

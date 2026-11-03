@@ -31,7 +31,8 @@ body {
   line-height: 1.15;
 }
 
-#status {
+#status,
+#client-id {
   display: inline-flex;
   align-items: center;
   gap: .4rem;
@@ -40,6 +41,89 @@ body {
   font-size: .8125rem;
   font-weight: 600;
   line-height: 1.5;
+  white-space: nowrap;
+}
+
+#client-id {
+  margin-inline-start: auto;
+  color: #475569;
+  background: #f1f5f9;
+  font-variant-numeric: tabular-nums;
+}
+
+#testing-taskbar {
+  margin-top: auto;
+  padding: .75rem 1rem;
+  border: 1px solid #dfe5ee;
+  border-radius: .75rem;
+  background: rgb(255 255 255 / 85%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem 1.25rem;
+}
+
+#testing-tools-title {
+  margin: 0;
+  color: #667085;
+  font-size: .8125rem;
+  font-weight: 600;
+}
+
+.taskbar-actions,
+.taskbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.taskbar-actions { gap: .75rem 1.25rem; }
+
+.taskbar-group { margin: 0; }
+
+.taskbar-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: #475569;
+  font-size: .8125rem;
+}
+
+#disconnect-duration {
+  box-sizing: border-box;
+  width: 5rem;
+  padding: .35rem .5rem;
+  border: 1px solid #dfe5ee;
+  border-radius: .5rem;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+}
+
+#disconnection-status { color: #a16207; font-size: .8125rem; }
+
+.taskbar-actions button {
+  padding: .35rem .75rem;
+  border: 1px solid #dfe5ee;
+  border-radius: 999px;
+  color: #475569;
+  background: #fff;
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.taskbar-actions button:hover:not(:disabled) { background: #f1f5f9; }
+
+.taskbar-actions button:disabled { opacity: .6; cursor: not-allowed; }
+
+.taskbar-actions button:focus-visible,
+#disconnect-duration:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
 }
 
 #status::before {
@@ -140,7 +224,7 @@ body {
 
 .caption-final { color: #111827; font-weight: 600; }
 
-#site-footer { margin-top: auto; padding-top: 2rem; color: #667085; font-size: .75rem; text-align: center; }
+#site-footer { padding-top: 1rem; color: #667085; font-size: .75rem; text-align: center; }
 
 @media (min-width: 960px) {
   #classroom-layout {
