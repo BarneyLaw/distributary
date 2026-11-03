@@ -1,0 +1,110 @@
+=== --clients at commit 6408e06, profile: qdisc tbf 8014: root refcnt 2 rate 2Mbit burst 4Kb lat 400ms  
+Starting 400 clients; slow=0, disconnecting=0, late=0
+SOURCE_DONE: emitted 49 finalized segments
+Results written to /home/william-liow/distributary/experiments/results/runs/live_T2_400-clients_bandwidth-2mbit_after-merge_20261103/t2_run01.csv
+Starting 400 clients; slow=0, disconnecting=0, late=0
+SOURCE_DONE: emitted 49 finalized segments
+Results written to /home/william-liow/distributary/experiments/results/runs/live_T2_400-clients_bandwidth-2mbit_after-merge_20261103/t2_run02.csv
+Starting 400 clients; slow=0, disconnecting=0, late=0
+SOURCE_DONE: emitted 49 finalized segments
+Results written to /home/william-liow/distributary/experiments/results/runs/live_T2_400-clients_bandwidth-2mbit_after-merge_20261103/t2_run03.csv
+
+=== Run 1/3 ===
+Clients=400, duration=40.0s, source segments=49
+LiveRecall Results
+==================
+Clients observed:              400
+Live caption messages:         28616
+Recovered history items:       134
+Accepted messages:             28616
+Recovered messages:            134
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               1457.90 ms
+P95 caption age:               5880.92 ms
+P99 caption age:               10072.39 ms
+Fresh Caption Ratio (<=500 ms): 1.65%
+Fresh Final Caption Ratio (<=500 ms): 0.00%
+Successful connections:        412
+Connection errors:             12
+Unique final captions:         17696/19600
+Final-caption completeness:    90.29%
+Unique live revisions:         28616/58800
+Normal Update Coverage:        48.67%
+
+Reconnect / late-join HISTORY response
+--------------------------------------
+Recovery P50: 813.30 ms
+Recovery P95: 3682.14 ms
+Note: fast HISTORY response alone does not prove correct recovery; check final completeness and duplicate/stale counts too.
+
+=== Run 2/3 ===
+Clients=400, duration=40.0s, source segments=49
+LiveRecall Results
+==================
+Clients observed:              400
+Live caption messages:         28202
+Recovered history items:       263
+Accepted messages:             28202
+Recovered messages:            263
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               1464.44 ms
+P95 caption age:               6839.17 ms
+P99 caption age:               10760.13 ms
+Fresh Caption Ratio (<=500 ms): 1.02%
+Fresh Final Caption Ratio (<=500 ms): 0.00%
+Successful connections:        411
+Connection errors:             11
+Unique final captions:         17585/19600
+Final-caption completeness:    89.72%
+Unique live revisions:         28202/58800
+Normal Update Coverage:        47.96%
+
+Reconnect / late-join HISTORY response
+--------------------------------------
+Recovery P50: 767.03 ms
+Recovery P95: 2572.58 ms
+Note: fast HISTORY response alone does not prove correct recovery; check final completeness and duplicate/stale counts too.
+
+=== Run 3/3 ===
+Clients=400, duration=40.0s, source segments=49
+LiveRecall Results
+==================
+Clients observed:              400
+Live caption messages:         28679
+Recovered history items:       289
+Accepted messages:             28679
+Recovered messages:            289
+Duplicate messages observed:   0
+Stale messages observed:       0
+P50 caption age:               1492.88 ms
+P95 caption age:               5319.36 ms
+P99 caption age:               9753.15 ms
+Fresh Caption Ratio (<=500 ms): 1.37%
+Fresh Final Caption Ratio (<=500 ms): 0.00%
+Successful connections:        412
+Connection errors:             12
+Unique final captions:         18065/19600
+Final-caption completeness:    92.17%
+Unique live revisions:         28679/58800
+Normal Update Coverage:        48.77%
+
+Reconnect / late-join HISTORY response
+--------------------------------------
+Recovery P50: 790.30 ms
+Recovery P95: 1604.46 ms
+Note: fast HISTORY response alone does not prove correct recovery; check final completeness and duplicate/stale counts too.
+
+=== Median across independent runs ===
+P50 caption age                  1464.44 ms
+P95 caption age                  5880.92 ms
+P99 caption age                 10072.39 ms
+Fresh Caption Ratio                 1.37 %
+Fresh Final Caption Ratio           0.00 %
+Final completeness                 90.29 %
+Normal Update Coverage             48.67 %
+Normal-client P95                5880.92 ms
+Recovery P95                     2572.58 ms
+
+Public run complete. CSV and JSON result files were written beside run_demo.py.
