@@ -43,6 +43,8 @@ function fixture(t) {
   };
   const saved = new Map([["liverecall-client-id", "123456"]]);
   globalThis.sessionStorage = {
+    get length() { return saved.size; },
+    key: index => [...saved.keys()][index] ?? null,
     getItem: key => saved.get(key) ?? null,
     setItem: (key, value) => saved.set(key, value),
     removeItem: key => saved.delete(key)
@@ -84,6 +86,9 @@ function fixture(t) {
 
 test("refresh requires confirmation, clears captions, changes ID, and stops the old connection", t => {
   const f = fixture(t);
+  f.saved.set('liverecall-captions:["ws://another-server:8765","L2"]', "old captions");
+  f.saved.set("liverecall-preference", "old preference");
+  f.saved.set("unrelated-app-state", "keep");
   f.refresh();
   assert.equal(f.reloads(), 0);
   assert.equal(f.captions.getCaptions().length, 1);
@@ -98,6 +103,8 @@ test("refresh requires confirmation, clears captions, changes ID, and stops the 
   assert.deepEqual(f.captions.getResumePosition(), { last_segment: 0, last_revision: 0 });
   assert.notEqual(getClientId(), f.originalId);
   assert.equal(Number(f.saved.get("liverecall-client-id")), getClientId());
+  assert.deepEqual([...f.saved.keys()].sort(), ["liverecall-client-id", "unrelated-app-state"]);
+  assert.equal(f.saved.get("unrelated-app-state"), "keep");
 });
 
 test("temporary disconnection waits the full duration then sends CLIENT_HELLO with the same identity", t => {

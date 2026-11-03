@@ -1,5 +1,24 @@
 import { resetClientId } from "./connection.js";
 
+function clearSavedClientState() {
+  let storage;
+  try {
+    storage = globalThis.sessionStorage;
+  } catch {
+    // When storage is inaccessible, the client has been running in memory.
+    return;
+  }
+  if (!storage) return;
+  // Remove this tab's LiveRecall state, including other cached lecture/server
+  // namespaces, without touching unrelated applications on the same origin.
+  for (let index = storage.length - 1; index >= 0; index--) {
+    const key = storage.key(index);
+    if (key?.startsWith("liverecall-")) {
+      storage.removeItem(key);
+    }
+  }
+}
+
 // Testing controls belong here; caption rendering and protocol handling stay separate.
 export function createTestingTools({ captions, connection, onBeforeReset = () => {} }) {
   const refreshButton = document.getElementById("refresh-client-session");
@@ -7,6 +26,8 @@ export function createTestingTools({ captions, connection, onBeforeReset = () =>
   const disconnectDuration = document.getElementById("disconnect-duration");
   const disconnectButton = document.getElementById("simulate-disconnection");
   const disconnectStatus = document.getElementById("disconnection-status");
+  // Browsers can restore form values on reload; a new client uses the defaults.
+  disconnectDuration.value = disconnectDuration.defaultValue;
   let simulationTimer = null;
   let restarting = false;
 
@@ -19,11 +40,12 @@ export function createTestingTools({ captions, connection, onBeforeReset = () =>
       : "";
     disconnectStatus.hidden = !active;
   }
+  showSimulation(0);
 
   refreshButton.addEventListener("click", () => {
     if (restarting || !window.confirm(
       "Refresh client session?\n\n" +
-      "This will remove ALL captions saved for the current session in this tab! " +
+      "This will remove ALL captions saved by LiveRecall in this tab, reset its settings, " +
       "and restart it with a new client ID. This cannot be undone."
     )) {
       return;
@@ -34,6 +56,7 @@ export function createTestingTools({ captions, connection, onBeforeReset = () =>
     connection.disconnect();
     try {
       captions.clear();
+      clearSavedClientState();
       resetClientId();
       onBeforeReset();
       window.location.reload();

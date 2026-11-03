@@ -17,6 +17,13 @@ export function createUI({ getHistory, clientId }) {
   let recallSeconds = 30;
   let snapshotTime = 0;
   let snapshotKeys = new Set();
+  // Initialize explicitly because browsers can restore form and DOM state on reload.
+  recallContent.hidden = true;
+  recallToggle.setAttribute("aria-expanded", "false");
+  timeFormat.value = "relative";
+  for (const button of windowButtons) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.seconds) === recallSeconds));
+  }
   const localTime = new Intl.DateTimeFormat(undefined, {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
   });
