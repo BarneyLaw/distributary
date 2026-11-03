@@ -31,7 +31,8 @@ body {
   line-height: 1.15;
 }
 
-#status {
+#status,
+#client-id {
   display: inline-flex;
   align-items: center;
   gap: .4rem;
@@ -40,6 +41,14 @@ body {
   font-size: .8125rem;
   font-weight: 600;
   line-height: 1.5;
+  white-space: nowrap;
+}
+
+#client-id {
+  margin-inline-start: auto;
+  color: #475569;
+  background: #f1f5f9;
+  font-variant-numeric: tabular-nums;
 }
 
 #status::before {

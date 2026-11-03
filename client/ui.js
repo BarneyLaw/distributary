@@ -1,6 +1,7 @@
 // DOM rendering and user interactions; caption acceptance belongs to the store.
-export function createUI({ getHistory }) {
+export function createUI({ getHistory, clientId }) {
   const statusEl = document.getElementById("status");
+  document.getElementById("client-id").textContent = `Client ID: ${clientId}`;
   const liveEl = document.getElementById("live");
   const historyEl = document.getElementById("live-history");
   const currentEl = document.getElementById("live-current");

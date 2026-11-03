@@ -1,7 +1,7 @@
 let clientId;
 
 // Keep one client ID per tab, including across reloads and reconnects.
-function numericClientId() {
+export function getClientId() {
   if (clientId !== undefined) {
     return clientId;
   }
@@ -28,7 +28,7 @@ function numericClientId() {
 function getHelloMsg(session, last_segment, last_revision, history_seconds){
   return JSON.stringify({
     type: "CLIENT_HELLO",
-    client_id: numericClientId(),
+    client_id: getClientId(),
     session,
     last_segment: last_segment,
     last_revision: last_revision,

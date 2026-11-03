@@ -1,11 +1,11 @@
 import { createCaptionStore } from "./captions.js";
-import { connect } from "./connection.js";
+import { connect, getClientId } from "./connection.js";
 import { createUI } from "./ui.js";
 
 const url = "ws://127.0.0.1:8765";
 const session = "L1";
 const captions = createCaptionStore({ url, session });
-const ui = createUI({ getHistory: captions.getHistory });
+const ui = createUI({ getHistory: captions.getHistory, clientId: getClientId() });
 
 // Restore the three live lines before waiting for the WebSocket or its history.
 for (const caption of captions.getCaptions().slice(-3)) {
