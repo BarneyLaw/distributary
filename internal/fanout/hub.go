@@ -31,7 +31,8 @@ type hub struct {
 	controlTimeout time.Duration
 
 	queueDelayTreshold time.Duration
-	modeThreshold      uint8 // Determine after how many queueing delay observations that a client mode can be changed.
+	resetDelay         time.Duration // pong this late (above minRTT) resets the connection
+	modeThreshold      uint8         // Determine after how many queueing delay observations that a client mode can be changed.
 
 	shutdown     context.Context
 	shutdownFunc context.CancelFunc
@@ -53,7 +54,8 @@ func NewHub(session *session.Session) *hub {
 		pingInterval:       20 * time.Second,
 		pongTimeout:        20 * time.Second,
 		controlTimeout:     5 * time.Second,
-		queueDelayTreshold: 30 * time.Millisecond,
+		queueDelayTreshold: 250 * time.Millisecond,
+		resetDelay:         3 * time.Second,
 		modeThreshold:      2,
 		shutdown:           ctx,
 		shutdownFunc:       cancel,
