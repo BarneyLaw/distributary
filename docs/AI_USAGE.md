@@ -2,7 +2,7 @@
 
 ## Tools used
 - Claude
-- ChatGPT
+- ChatGPT (Codex)
 
 ## One useful suggestion
 ### Problem
