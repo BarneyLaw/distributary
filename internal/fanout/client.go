@@ -21,7 +21,7 @@ type client struct {
 	timeSent  time.Time
 	timeAcked time.Time
 	sampleRTT time.Duration
-	sRTT      time.Duration
+	sRTT      time.Duration // Smoothed RTT
 
 	minRTT time.Duration
 
@@ -40,6 +40,7 @@ type client struct {
 }
 
 // Must be executed inside mutex lock
+// Smoothed RTT
 func (c *client) computeSRTT(alpha float64) {
 	if c.sRTT == 0 {
 		c.sRTT = c.sampleRTT
